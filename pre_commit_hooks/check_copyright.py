@@ -16,6 +16,19 @@ from datetime import date
 
 
 def main(args=None):
+    """Checks for valid copyright statements in given files.
+
+    This function scans the specified files for copyright notices and reports
+    any files that either lack a copyright statement or have an invalid year.
+
+    Args:
+        args (list, optional): A list of filenames to be checked. Defaults to
+            `sys.argv[1:]` if not provided.
+
+    Raises:
+        SystemExit: Exits the program with an exit code of 1 if any
+            files have missing or invalid copyright statements.
+    """
     current_year = date.today().year
     copyright_re = re.compile(
         rf"\bcopyright \(c\) (:?\d{{4}}-|)\b{current_year}\b", re.IGNORECASE
