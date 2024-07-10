@@ -204,7 +204,7 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
         message_file.write("".join(message_lines))
 
 
-if __name__ == "__main__":
+def main(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("msg_file", help="the message file")
     group = parser.add_mutually_exclusive_group(required=True)

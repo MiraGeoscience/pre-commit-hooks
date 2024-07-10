@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pre-commit-hooks"
+name = "pre_commit_hooks"
 version = "0.1.0"
 description = ""
 authors = ["SophieCurinier <sophiec@mirageoscience.com>"]
@@ -8,6 +8,12 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.12"
 
+[tool.poetry.scripts]
+check_copyright = "pre_commit_hooks.check_copyright:main"
+git_message_hook = "pre_commit_hooks.git_message_hook:main"
+
+[tool.flit.module]
+name = "pre_commit_hooks"
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,17 +1,19 @@
 -   id: check-copyright
     name: Check copyright
-    entry: python devtools/check-copyright.py
+    entry: check_copyright
     language: python
-    types: [text]
     files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
     exclude: (^\.|^docs/)
+    types: [text]
 -   id: prepare-commit-msg
-    stages: [prepare-commit-msg]
     name: Prepare commit message
-    entry: python devtools/git_message_hook.py --prepare
+    entry: git_message_hook
+    args: [--prepare]
     language: python
+    stages: [prepare-commit-msg]
 -   id: check-commit-msg
-    stages: [commit-msg]
     name: Check commit message
-    entry: python devtools/git_message_hook.py --check
+    entry: git_message_hook
+    args: [--check]
     language: python
+    stages: [commit-msg]

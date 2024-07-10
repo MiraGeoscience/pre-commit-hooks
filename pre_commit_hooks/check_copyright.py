@@ -15,7 +15,7 @@ import sys
 from datetime import date
 
 
-if __name__ == "__main__":
+def main(args=None):
     current_year = date.today().year
     copyright_re = re.compile(
         rf"\bcopyright \(c\) (:?\d{{4}}-|)\b{current_year}\b", re.IGNORECASE
