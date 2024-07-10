@@ -1,18 +1,18 @@
 -   id: check-copyright
-    name: Check copyright
+    name: check copyright
     entry: check_copyright
     language: python
     files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
     exclude: (^\.|^docs/)
     types: [text]
 -   id: prepare-commit-msg
-    name: Prepare commit message
+    name: prepare commit message
     entry: git_message_hook
     args: [--prepare]
     language: python
     stages: [prepare-commit-msg]
 -   id: check-commit-msg
-    name: Check commit message
+    name: check commit message
     entry: git_message_hook
     args: [--check]
     language: python
