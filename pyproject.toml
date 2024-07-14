@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "mirageoscience-pre_commit_hooks"
+name = "mirageoscience-pre-commit-hooks"
 
 version = "0.1.0"
 
 license = "MIT"
 description = ""
-repository = "https://github.com/MiraGeoscience/pre-commit-hooks"
+repository = "https://github.com/MiraGeoscience/mirageoscience-pre-commit-hooks"
 authors = ["Mira Geoscience <support@mirageoscience.com>"]
 readme = "README.rst"
 
@@ -14,15 +14,19 @@ include = [
     "README.rst"
 ]
 
+packages = [
+    { include = "mirageoscience-pre-commit-hooks" }
+]
+
 [tool.poetry.dependencies]
 python = "^3.12"
 
 [tool.poetry.scripts]
-check_copyright = "mirageoscience-pre_commit_hooks.check_copyright:main"
-git_message_hook = "mirageoscience-pre_commit_hooks.git_message_hook:main"
+check_copyright = "mirageoscience-pre-commit-hooks.check_copyright:main"
+git_message_hook = "mirageoscience-pre-commit-hooks.git_message_hook:main"
 
 [tool.flit.module]
-name = "mirageoscience-pre_commit_hooks"
+name = "mirageoscience-pre-commit-hooks"
 
 [build-system]
 requires = ["poetry-core"]
