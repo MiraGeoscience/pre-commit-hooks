@@ -22,19 +22,19 @@ jobs:
     name: Static analysis
     uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-static_analysis.yml@v1.0.0
     with:
-      app_name: 'my_app'
+      app_name: 'mirageoscience_pre_commit_hooks'
   call-workflow-pytest-on-windows:
     name: Pytest on Windows
     uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-pytest_windows.yml@v1.0.0
     with:
-      python_ver: '["3.10"]'
+      python_ver: '["3.12"]'
       cache_number: 1
-      codecov_reference_python_ver: '3.10'
+      codecov_reference_python_ver: '3.12'
     secrets: inherit
   call-workflow-pytest-on-unix-os:
     name: Pytest on Unix OS
     uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-pytest_unix_os.yml@v1.0.0
     with:
-      python_ver: '["3.10", "3.11", "3.12"]'
+      python_ver: '["3.12"]'
       os: '["ubuntu-latest", "macos-latest"]'
       cache_number: 1
