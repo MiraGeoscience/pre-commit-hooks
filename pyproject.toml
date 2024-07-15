@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "mirageoscience-pre-commit-hooks"
+name = "mirageoscience_pre_commit_hooks"
 
 version = "1.0.0"
 
@@ -15,18 +15,15 @@ include = [
 ]
 
 packages = [
-    { include = "mirageoscience-pre-commit-hooks" }
+    { include = "hooks" }
 ]
 
 [tool.poetry.dependencies]
 python = "^3.12"
 
 [tool.poetry.scripts]
-check_copyright = "mirageoscience-pre-commit-hooks.check_copyright:main"
-git_message_hook = "mirageoscience-pre-commit-hooks.git_message_hook:main"
-
-[tool.flit.module]
-name = "mirageoscience-pre-commit-hooks"
+check_copyright = "hooks.check_copyright:main"
+git_message_hook = "hooks.git_message_hook:main"
 
 [build-system]
 requires = ["poetry-core"]
