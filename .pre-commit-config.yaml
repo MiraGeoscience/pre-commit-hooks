@@ -35,11 +35,8 @@ repos:
     hooks:
     -   id: mypy
         additional_dependencies: [
-            numpy==1.26.*,  # pre-commit CI does not provide numpy 1.23.*
-            types-toml,
             tomli, # to read config from pyproject.toml
         ]
-        exclude: ^(docs|my_app-assets)/
 -   repo: https://github.com/codingjoe/relint
     rev: 3.1.1
     hooks:
@@ -68,7 +65,7 @@ repos:
         exclude_types: [jupyter]
     -   id: check-toml
     -   id: check-yaml
-#    -   id: check-added-large-files # crashing on some configuration. To be investigated
+    -   id: check-added-large-files # crashing on some configuration. To be investigated
     -   id: check-case-conflict
     -   id: check-merge-conflict
     -   id: debug-statements
@@ -83,7 +80,6 @@ repos:
             - --autofix
             - --indent=4
             - --no-sort-keys
-            - --top-keys
             - version,title,icon,documentation,conda_environment,run_command,geoh5,monitoring_directory,workspace_geoh5
         exclude_types: [jupyter]
         exclude: ^docs/(.*/)?images/
