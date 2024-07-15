@@ -6,7 +6,7 @@
 #  This file is part of pre-commit-hooks package.                                       '
 #                                                                                       '
 #  mirageoscience-pre-commit-hooks is distributed under the terms and conditions of     '
-#  the MIT License (see LICENSE file at the root of this source code package).          '                '
+#  the MIT License (see LICENSE file at the root of this source code package).          '
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 """Some Git pre-commit hooks implementations."""
@@ -52,12 +52,6 @@ def get_branch_name() -> str | None:
         stdout=subprocess.PIPE,
         text=True,
     )
-
-    # cannot use HEAD during rebase
-    # git_proc = subprocess.run(
-    #        shlex.split('git symbolic-ref --short HEAD'), stdout=subprocess.PIPE, universal_newlines=True
-    #    )
-    # Note: version above suggested by Atlassian. Could also use: git rev-parse --abbrev-ref HEAD
 
     if git_proc.returncode != 0:
         return None

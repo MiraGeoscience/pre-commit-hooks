@@ -16,7 +16,7 @@ Included Hooks
 -  ``check-commit-message``: Checks that the branch name or the commit
    message starts with a reference to JIRA, and if the message meets the
    minimum required length for the summary line. Also checks that the JIRA ID in
-   the commit message is consistant with the one extracted from the
+   the commit message is consistEnt with the one extracted from the
    branch name (if any).
 
 Usage
