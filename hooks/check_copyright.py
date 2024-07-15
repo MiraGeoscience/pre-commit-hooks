@@ -3,8 +3,8 @@
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 #  Copyright (c) 2024 Mira Geoscience Ltd.                                              '
 #                                                                                       '
-#  This file is part of pre-commit-hooks package.                                       '           
-#                                                                                       '      
+#  This file is part of pre-commit-hooks package.                                       '
+#                                                                                       '
 #  mirageoscience-pre-commit-hooks is distributed under the terms and conditions of     '
 #  the MIT License (see LICENSE file at the root of this source code package).          '                '
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -58,6 +58,7 @@ def main(args=None):
         for f in report_files:
             sys.stderr.write(f"{f}: No copyright or invalid year\n")
         exit(1)
+
 
 # readonly CURRENT_YEAR=$(date +"%Y")
 

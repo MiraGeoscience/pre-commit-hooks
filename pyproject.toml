@@ -21,6 +21,13 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 
+[tool.poetry.group.dev.dependencies]
+Pygments = "*"
+pylint = "*"
+pytest = "*"
+pytest-cov = "*"
+tomli = "*"
+
 [tool.poetry.scripts]
 check_copyright = "hooks.check_copyright:main"
 git_message_hook = "hooks.git_message_hook:main"
