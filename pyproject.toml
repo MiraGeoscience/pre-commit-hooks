@@ -15,7 +15,7 @@ include = [
 ]
 
 packages = [
-    { include = "hooks" }
+    { include = "mirageoscience/hooks" }
 ]
 
 [tool.poetry.dependencies]
