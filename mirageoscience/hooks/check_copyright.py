@@ -3,7 +3,7 @@
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 #  Copyright (c) 2024 Mira Geoscience Ltd.                                              '
 #                                                                                       '
-#  This file is part of mirageoscience_pre_commit_hooks package.                        '
+#  This file is part of mirageoscience.pre-commit-hooks package.                        '
 #                                                                                       '
 #  mirageoscience_pre_commit_hooks is distributed under the terms and conditions of     '
 #  the MIT License (see LICENSE file at the root of this source code package).          '

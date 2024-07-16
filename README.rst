@@ -1,4 +1,4 @@
-MiraGeoscience-Pre-Commit Hooks
+MiraGeoscience.Pre-Commit Hooks
 ===============================
 
 This repository provides a collection of pre-commit hooks to automate
@@ -26,7 +26,7 @@ Example of ``.pre-commit-config.yamnl``:
 
 .. code:: yaml
 
-   - repo: http://github.com/MiraGeoscience/mirageoscience-pre-commit-hooks
+   - repo: http://github.com/MiraGeoscience/mirageoscience.pre-commit-hooks
      rev: <release>
      hooks:
      - id: check-copyright

@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "mirageoscience_pre_commit_hooks"
+name = "mirageoscience.pre-commit-hooks"
 
 version = "1.0.0"
 
 license = "MIT"
 description = ""
-repository = "https://github.com/MiraGeoscience/mirageoscience-pre-commit-hooks"
+repository = "https://github.com/MiraGeoscience/mirageoscience.pre-commit-hooks"
 authors = ["Mira Geoscience <support@mirageoscience.com>"]
 readme = "README.rst"
 

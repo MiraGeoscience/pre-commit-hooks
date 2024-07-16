@@ -42,8 +42,8 @@ repos:
     hooks:
     -   id: relint
         args: [-W]  # to fail on warnings
-- repo: http://github.com/MiraGeoscience/mirageoscience-pre-commit-hooks
-  rev: v0.1.0
+- repo: https://github.com/MiraGeoscience/mirageoscience.pre-commit-hooks
+  rev: v1.0.0
   hooks:
   - id: check-copyright
     files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
@@ -80,7 +80,6 @@ repos:
             - --autofix
             - --indent=4
             - --no-sort-keys
-            - version,title,icon,documentation,conda_environment,run_command,geoh5,monitoring_directory,workspace_geoh5
         exclude_types: [jupyter]
         exclude: ^docs/(.*/)?images/
 -   repo: https://github.com/rstcheck/rstcheck
