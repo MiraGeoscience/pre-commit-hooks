@@ -25,16 +25,16 @@ Usage
 Example of ``.pre-commit-config.yamnl``:
 
 .. code:: yaml
-
-   - repo: http://github.com/MiraGeoscience/mirageoscience.pre-commit-hooks
-     rev: <release>
-     hooks:
-     - id: check-copyright
-       types: [text]
-       files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
-       exclude: (^\.|^docs/)
-     - id: prepare-commit-msg
-     - id: check-commit-msg
+repos:
+   -  repo: http://github.com/MiraGeoscience/pre-commit-hooks
+      rev: <release>
+      hooks:
+      -  id: check-copyright
+         types: [text]
+         files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
+         exclude: (^\.|^docs/)
+      -  id: prepare-commit-msg
+      -  id: check-commit-msg
 
 License
 ^^^^^^^

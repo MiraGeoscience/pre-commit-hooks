@@ -1,4 +1,3 @@
-
 default_language_version:
     python: python3
 exclude: ^docs/(conf.py|_ext/)
@@ -42,14 +41,14 @@ repos:
     hooks:
     -   id: relint
         args: [-W]  # to fail on warnings
-- repo: https://github.com/MiraGeoscience/mirageoscience.pre-commit-hooks
-  rev: v1.0.0
-  hooks:
-  - id: check-copyright
-    files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
-    exclude: (^\.|^docs/)
-  - id: prepare-commit-msg
-  - id: check-commit-msg
+-   repo: https://github.com/MiraGeoscience/pre-commit-hooks
+    rev: v1.0.0
+    hooks:
+    -   id: check-copyright
+        files: (^LICENSE|^README(|-dev).rst|\.py|\.pyi)$
+        exclude: (^\.|^docs/)
+    -   id: prepare-commit-msg
+    -   id: check-commit-msg
 -   repo: https://github.com/codespell-project/codespell
     rev: v2.3.0
     hooks:
