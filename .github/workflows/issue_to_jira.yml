@@ -1,0 +1,12 @@
+name: Create JIRA issue
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  call-workflow-create-jira-issue:
+    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-jira-issue_to_jira.yml@v1.0.0
+    secrets: inherit
+    with:
+      project_key: 'GEOPY'

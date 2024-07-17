@@ -1,0 +1,22 @@
+-   id: check-copyright
+    name: check-copyright
+    description: check for valid copyright statements in given files
+    entry: check_copyright
+    language: python
+    types: [text]
+
+-   id: prepare-commit-msg
+    name: prepare commit message
+    description: add the JIRA ID found in the branch name in case it is missing from the commit message
+    entry: git_message_hook
+    args: [--prepare]
+    language: python
+    stages: [prepare-commit-msg]
+
+-   id: check-commit-msg
+    name: check commit message
+    description: check the commit message for a valid JIRA ID
+    entry: git_message_hook
+    args: [--check]
+    language: python
+    stages: [commit-msg]
