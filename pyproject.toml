@@ -29,8 +29,8 @@ pytest-cov = "*"
 tomli = "*"
 
 [tool.poetry.scripts]
-check_copyright = "hooks.check_copyright:main"
-git_message_hook = "hooks.git_message_hook:main"
+check_copyright = "mirageoscience.hooks.check_copyright:main"
+git_message_hook = "mirageoscience.hooks.git_message_hook:main"
 
 [tool.ruff]
 target-version = "py310"
