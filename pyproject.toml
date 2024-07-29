@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "mirageoscience.pre-commit-hooks"
 
-version = "1.0.0"
+version = "1.0.1"
 
 license = "MIT"
 description = ""
@@ -25,6 +25,7 @@ python = "^3.10"
 Pygments = "*"
 pylint = "*"
 pytest = "*"
+pytest-mock = "*"
 pytest-cov = "*"
 tomli = "*"
 
