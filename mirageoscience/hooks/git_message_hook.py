@@ -31,7 +31,7 @@ def get_jira_id(text) -> str:
         making sure it gets compiled only once."""
 
         __pattern = re.compile(
-            r"(?:GEOPY|GI|GA|GMS|VPem1D|VPem3D|VPmg|UBCGIF|LICMGR)-\d+"
+            r"(?:\w*!)?\s*\S?\b((?:GEOPY|GI|GA|GMS|VPem1D|VPem3D|VPmg|UBCGIF|LICMGR|DEVOPS|QA)-\d+)"
         )
 
         @staticmethod
@@ -41,8 +41,29 @@ def get_jira_id(text) -> str:
 
     # use re.match() rather than re.search() to enforce the JIRA reference to be at the beginning
     match = re.match(JiraPattern.get(), text.strip())
-    return match.group(0) if match else ""
+    return match.group(1) if match else ""
 
+def get_message_prefix_bang(line: str) -> str:
+    """Capture the standard commit message prefix, if any, such as 'fixup!', 'amend!',
+        etc.
+
+        :return: the standard commit message prefix if found, else empty string.
+        """
+    class BangPattern:
+        """Internal class that encapsulates the regular expression for the Bnag pattern,
+        making sure it gets compiled only once."""
+
+        __pattern = re.compile(
+            r"(\w*!\s)"
+        )
+
+        @staticmethod
+        def get():
+            """:return: the compiled regular expression for the JIRA pattern"""
+            return BangPattern.__pattern
+    # use re.match() rather than re.search() to enforce pattern at the beginning
+    match = re.match(BangPattern.get(), line.strip())
+    return match.group(1) if match else ""
 
 def get_branch_name() -> str | None:
     """:return: the name of the current branch"""
@@ -51,6 +72,7 @@ def get_branch_name() -> str | None:
         shlex.split("git branch --list"),
         stdout=subprocess.PIPE,
         text=True,
+        check=False
     )
 
     if git_proc.returncode != 0:
@@ -100,18 +122,20 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
 
     message_jira_id = ""
     first_line = None
-    with open(filepath) as message_file:
+    with open(filepath, encoding="utf-8") as message_file:
         for line in message_file:
             if not line.startswith("#") and len(line.strip()) > 0:
                 # test only the first non-comment line that is not empty
                 # (should we reject messages with empty first line?)
-                first_line = line
+                first_line = line.strip()
+                prefix_bang = get_message_prefix_bang(first_line)
+                first_line = first_line[len(prefix_bang) :].strip()
                 message_jira_id = get_jira_id(first_line)
                 break
     assert first_line is not None
 
     if not branch_jira_id and not (
-        message_jira_id or first_line.strip().lower().startswith("merge")
+        message_jira_id or (not prefix_bang and first_line.lower().startswith("merge"))
     ):
         return (
             False,
@@ -121,7 +145,8 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
     if branch_jira_id and message_jira_id and branch_jira_id != message_jira_id:
         return (
             False,
-            f"Different JIRA ID in commit message {message_jira_id} and in branch name {branch_jira_id}.",
+            f"Different JIRA ID in commit message {message_jira_id} "
+            f"and in branch name {branch_jira_id}.",
         )
 
     stripped_message_line = ""
@@ -176,24 +201,31 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
     if source not in [None, "message", "template"]:
         return
 
+    prefix_bang = ""
     with open(
         filepath,
         "r+",
+        encoding="utf-8"
     ) as message_file:
         message_has_jira_id = False
         message_lines = message_file.readlines()
         for line_index, line_content in enumerate(message_lines):
             if not line_content.startswith("#"):
                 # test only the first non-comment line
+                line_content = line_content.strip()
+                prefix_bang = get_message_prefix_bang(line_content)
+                line_content = line_content[len(prefix_bang):].strip()
                 message_jira_id = get_jira_id(line_content)
                 if not message_jira_id:
-                    message_lines[line_index] = branch_jira_id + ": " + line_content
+                    message_lines[line_index] = (
+                        f"{prefix_bang}[{branch_jira_id}] {line_content}\n"
+                    )
                 message_has_jira_id = True
                 break
 
         if not message_has_jira_id:
             # message is empty or all lines are comments: insert JIRA ID at the very beginning
-            message_lines.insert(0, branch_jira_id + ": ")
+            message_lines.insert(0, f"{prefix_bang}[{branch_jira_id}]\n")
 
         message_file.seek(0, 0)
         message_file.write("".join(message_lines))
