@@ -44,7 +44,7 @@ def main(args=None):
             for line in file:
                 count += 1
                 if count >= max_lines and not (
-                    f.endswith("README.rst") or f.endswith("README-dev.rst")
+                    f.endswith("README.rst") or f.endswith("README-dev.rst") or f.endswith("package.rst")
                 ):
                     break
                 if re.search(copyright_re, line):
