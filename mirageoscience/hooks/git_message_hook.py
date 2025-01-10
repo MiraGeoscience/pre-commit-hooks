@@ -226,7 +226,7 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
         message_file.write("".join(message_lines))
 
 
-def main(args=None):
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("msg_file", help="the message file")
     group = parser.add_mutually_exclusive_group(required=True)
