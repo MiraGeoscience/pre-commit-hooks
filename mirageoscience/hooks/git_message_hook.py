@@ -43,36 +43,35 @@ def get_jira_id(text) -> str:
     match = re.match(JiraPattern.get(), text.strip())
     return match.group(1) if match else ""
 
+
 def get_message_prefix_bang(line: str) -> str:
     """Capture the standard commit message prefix, if any, such as 'fixup!', 'amend!',
-        etc.
+    etc.
 
-        :return: the standard commit message prefix if found, else empty string.
-        """
+    :return: the standard commit message prefix if found, else empty string.
+    """
+
     class BangPattern:
         """Internal class that encapsulates the regular expression for the Bnag pattern,
         making sure it gets compiled only once."""
 
-        __pattern = re.compile(
-            r"(\w*!\s)"
-        )
+        __pattern = re.compile(r"(\w*!\s)")
 
         @staticmethod
         def get():
             """:return: the compiled regular expression for the JIRA pattern"""
             return BangPattern.__pattern
+
     # use re.match() rather than re.search() to enforce pattern at the beginning
     match = re.match(BangPattern.get(), line.strip())
     return match.group(1) if match else ""
+
 
 def get_branch_name() -> str | None:
     """:return: the name of the current branch"""
 
     git_proc = subprocess.run(
-        shlex.split("git branch --list"),
-        stdout=subprocess.PIPE,
-        text=True,
-        check=False
+        shlex.split("git branch --list"), stdout=subprocess.PIPE, text=True, check=False
     )
 
     if git_proc.returncode != 0:
@@ -202,11 +201,7 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
         return
 
     prefix_bang = ""
-    with open(
-        filepath,
-        "r+",
-        encoding="utf-8"
-    ) as message_file:
+    with open(filepath, "r+", encoding="utf-8") as message_file:
         message_has_jira_id = False
         message_lines = message_file.readlines()
         for line_index, line_content in enumerate(message_lines):
@@ -214,7 +209,7 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
                 # test only the first non-comment line
                 line_content = line_content.strip()
                 prefix_bang = get_message_prefix_bang(line_content)
-                line_content = line_content[len(prefix_bang):].strip()
+                line_content = line_content[len(prefix_bang) :].strip()
                 message_jira_id = get_jira_id(line_content)
                 if not message_jira_id:
                     message_lines[line_index] = (

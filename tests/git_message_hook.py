@@ -7,6 +7,7 @@
 # ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 from __future__ import annotations
+
 import pytest
 
 from mirageoscience.hooks.git_message_hook import *
@@ -15,9 +16,12 @@ from mirageoscience.hooks.git_message_hook import *
 @pytest.fixture
 def mock_get_branch_name(mocker):
     def _mock_get_branch_name(branch_name):
-        mocker.patch('mirageoscience.hooks.git_message_hook.get_branch_name',
-                     return_value=branch_name)
+        mocker.patch(
+            "mirageoscience.hooks.git_message_hook.get_branch_name",
+            return_value=branch_name,
+        )
         return get_jira_id(branch_name)
+
     return _mock_get_branch_name
 
 
@@ -67,7 +71,10 @@ def test_check_commit_message_invalid_no_jira(mock_get_branch_name):
 
     is_valid, error_message = check_commit_message(filepath)
     assert not is_valid
-    assert error_message == "Either the branch name or the commit message must start with a JIRA ID."
+    assert (
+        error_message
+        == "Either the branch name or the commit message must start with a JIRA ID."
+    )
 
 
 def test_check_commit_message_invalid_different_jira(mock_get_branch_name):
