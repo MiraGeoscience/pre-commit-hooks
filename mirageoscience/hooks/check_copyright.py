@@ -84,8 +84,12 @@ def main():
     parser.add_argument("files", nargs="+", help="list of files to scan")
     parser.add_argument(
         "--full-scan-files",
-        nargs="+",
-        help=f"list of files to scan entirely, instead of checking only the {MAX_TOP_LINES} top lines",
+        type=lambda s: s.split(","),
+        help=(
+            "Comma-separated list of names for files to scan entirely, "
+            f"instead of checking only the top {MAX_TOP_LINES} lines"
+        ),
+        metavar="FILE1,FILE2,...",
         default=[],
         required=False,
     )

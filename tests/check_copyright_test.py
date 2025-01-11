@@ -116,8 +116,7 @@ def test_main_with_full_scan_files():
         "script_name",
         "file1.py",
         "--full-scan-files",
-        "full_file1.py",
-        "full_file2.py",
+        "full_file1.py,full_file2.py",
     ]
     with mock.patch.object(sys, "argv", test_args):
         with mock.patch(
