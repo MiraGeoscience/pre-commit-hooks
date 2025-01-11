@@ -11,15 +11,19 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from datetime import date
 from pathlib import Path
 
+
 MAX_TOP_LINES = 10
 
 
-def check_files(files: list[str]|None = None, full_scan_files:list[str]|None = None):
+def check_files(
+    files: list[str] | None = None, full_scan_files: list[str] | None = None
+):
     """Checks for valid copyright statements in given files.
 
     This function scans the specified files for copyright notices and reports
@@ -39,6 +43,8 @@ def check_files(files: list[str]|None = None, full_scan_files:list[str]|None = N
     copyright_re = re.compile(
         rf"\bcopyright \(c\) (:?\d{{4}}-|)\b{current_year}\b", re.IGNORECASE
     )
+    if full_scan_files is None:
+        full_scan_files = []
     if files is None:
         files = sys.argv[1:]
     file_paths = [Path(f) for f in files]
@@ -69,16 +75,15 @@ def main():
     parser.add_argument("files", nargs="+", help="list of files to scan")
     parser.add_argument(
         "--full-scan-files",
-        nargs='+',
+        nargs="+",
         help=f"list of files to scan entirely, instead of checking only the {MAX_TOP_LINES} top lines",
-        default = ["README.rst", "README-dev.rst", "package.rst"],
-        required=False
+        default=["README.rst", "README-dev.rst", "package.rst"],
+        required=False,
     )
     parser.add_argument("args", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
-    if args.prepare:
-        prepare_commit_msg(*args.files, args.full_scan_files)
+    check_files(args.files, args.full_scan_files)
 
 
 # Note: a simpler bash script for this task would be:
