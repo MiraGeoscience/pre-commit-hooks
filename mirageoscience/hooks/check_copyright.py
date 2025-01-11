@@ -19,6 +19,7 @@ from pathlib import Path
 
 
 MAX_TOP_LINES = 10
+_FULL_SCAN_FILE_NAMES = ["README.rst", "README-dev.rst", "package.rst"]
 
 
 def check_files(
@@ -85,12 +86,12 @@ def main():
         "--full-scan-files",
         nargs="+",
         help=f"list of files to scan entirely, instead of checking only the {MAX_TOP_LINES} top lines",
-        default=["README.rst", "README-dev.rst", "package.rst"],
+        default=[],
         required=False,
     )
 
     args = parser.parse_args()
-    if not check_files(args.files, args.full_scan_files):
+    if not check_files(args.files, _FULL_SCAN_FILE_NAMES + args.full_scan_files):
         sys.exit(1)
 
 

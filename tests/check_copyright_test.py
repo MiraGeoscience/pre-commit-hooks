@@ -16,7 +16,7 @@ from unittest import mock
 
 import pytest
 
-from mirageoscience.hooks.check_copyright import check_files
+from mirageoscience.hooks.check_copyright import _FULL_SCAN_FILE_NAMES, check_files
 from mirageoscience.hooks.check_copyright import main as check_copyright_main
 
 
@@ -126,5 +126,5 @@ def test_main_with_full_scan_files():
             mock_check_files.return_value = True
             check_copyright_main()
             mock_check_files.assert_called_once_with(
-                ["file1.py"], ["full_file1.py", "full_file2.py"]
+                ["file1.py"], [*_FULL_SCAN_FILE_NAMES, "full_file1.py", "full_file2.py"]
             )
