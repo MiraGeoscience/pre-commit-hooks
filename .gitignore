@@ -140,6 +140,11 @@ venv.bak/
 # mkdocs documentation
 /site
 
+#pycharm
+/.idea/*
+!/.idea/scopes/
+!/.idea/copyright/
+
 # mypy
 .mypy_cache/
 .dmypy.json

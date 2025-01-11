@@ -25,7 +25,8 @@ Usage
 Example of ``.pre-commit-config.yamnl``:
 
 .. code:: yaml
-repos:
+
+   repos:
    -  repo: http://github.com/MiraGeoscience/pre-commit-hooks
       rev: <release>
       hooks:
@@ -63,4 +64,4 @@ SOFTWARE.
 
 Copyright
 ^^^^^^^^^
-Copyright (c) 2024 Mira Geoscience Ltd.
+Copyright (c) 2024-2025 Mira Geoscience Ltd.
