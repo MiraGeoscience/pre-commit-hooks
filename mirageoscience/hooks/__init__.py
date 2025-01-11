@@ -7,4 +7,4 @@
 #  of the MIT License (see LICENSE file at the root of this source code package).   '
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
