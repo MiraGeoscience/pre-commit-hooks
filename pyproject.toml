@@ -24,6 +24,7 @@ python = "^3.10"
 [tool.poetry.group.dev.dependencies]
 Pygments = "*"
 pylint = "*"
+pylint-pytest = "*"
 pytest = "*"
 pytest-mock = "*"
 pytest-cov = "*"
