@@ -23,7 +23,7 @@ MAX_TOP_LINES = 10
 
 def check_files(
     files: list[str] | None = None, full_scan_files: list[str] | None = None
-):
+) -> bool:
     """Checks for valid copyright statements in given files.
 
     This function scans the specified files for copyright notices and reports
@@ -35,9 +35,9 @@ def check_files(
         full_scan_files (list, optional): A list of filenames to be scanned
             entirely, instead of checking only the top lines.
 
-    Raises:
-        SystemExit: Exits the program with an exit code of 1 if any
-            files have missing or invalid copyright statements.
+    Returns:
+        bool: True if all files have valid copyright statements,
+            False otherwise.
     """
     current_year = date.today().year
     copyright_re = re.compile(
@@ -64,13 +64,21 @@ def check_files(
             if not has_dated_copyright:
                 report_files.append(f)
 
-    if len(report_files) > 0:
-        for f in report_files:
-            sys.stderr.write(f"{f}: No copyright or invalid year\n")
-        exit(1)
+    if len(report_files) == 0:
+        return True
+
+    for f in report_files:
+        sys.stderr.write(f"{f}: No copyright or invalid year\n")
+    return False
 
 
 def main():
+    """Parses command line arguments and calls the `check_files` function.
+
+    Raises:
+        SystemExit: If check_files returns False.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument("files", nargs="+", help="list of files to scan")
     parser.add_argument(
@@ -80,10 +88,10 @@ def main():
         default=["README.rst", "README-dev.rst", "package.rst"],
         required=False,
     )
-    parser.add_argument("args", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
-    check_files(args.files, args.full_scan_files)
+    if not check_files(args.files, args.full_scan_files):
+        sys.exit(1)
 
 
 # Note: a simpler bash script for this task would be:
