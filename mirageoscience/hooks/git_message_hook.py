@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-# '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-#  Copyright (c) 2024 Mira Geoscience Ltd.                                              '
-#                                                                                       '
-#  This file is part of mirageoscience.pre-commit-hooks package.                        '
-#                                                                                       '
-#  mirageoscience_pre_commit_hooks is distributed under the terms and conditions of     '
-#  the MIT License (see LICENSE file at the root of this source code package).          '
-# '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+# '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+#  Copyright (c) 2024-2025 Mira Geoscience Ltd.                                     '
+#                                                                                   '
+#  This file is part of mirageoscience.pre-commit-hooks package.                    '
+#                                                                                   '
+#  mirageoscience.pre-commit-hooks is distributed under the terms and conditions    '
+#  of the MIT License (see LICENSE file at the root of this source code package).   '
+# '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 """Some Git pre-commit hooks implementations."""
 
