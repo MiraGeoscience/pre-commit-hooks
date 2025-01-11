@@ -9,12 +9,19 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from unittest import mock
+
 import pytest
 
 from mirageoscience.hooks.git_message_hook import (
     check_commit_message,
     get_jira_id,
     get_message_prefix_bang,
+)
+from mirageoscience.hooks.git_message_hook import (
+    main as git_message_hook_main,
 )
 
 
@@ -51,30 +58,30 @@ def test_get_message_prefix_bang_no_bang():
     assert actual_prefix_bang == expected_prefix_bang
 
 
-def test_check_commit_message_valid_with_message_jira(mock_get_branch_name):
+def test_check_commit_message_valid_with_message_jira(
+    mock_get_branch_name, tmp_path: Path
+):
     """Test avec identifiant JIRA dans le message de commit"""
     branch_name = "feature_branch"
     mock_get_branch_name(branch_name)
     message_content = "GEOPY-123 Fix a bug xx"
-    filepath = "test_commit_message.txt"
-    with open(filepath, "w") as f:
-        f.write(message_content)
+    filepath = tmp_path / "test_commit_message.txt"
+    filepath.write_text(message_content, encoding="utf-8")
 
-    is_valid, error_message = check_commit_message(filepath)
+    is_valid, error_message = check_commit_message(str(filepath))
     assert is_valid
     assert error_message == ""
 
 
-def test_check_commit_message_invalid_no_jira(mock_get_branch_name):
+def test_check_commit_message_invalid_no_jira(mock_get_branch_name, tmp_path: Path):
     """Test without JIRA id in the branch name or message content"""
     branch_name = "feature_branch"
     mock_get_branch_name(branch_name)
     message_content = "Fix a bug"
-    filepath = "test_commit_message.txt"
-    with open(filepath, "w") as f:
-        f.write(message_content)
+    filepath = tmp_path / "test_commit_message.txt"
+    filepath.write_text(message_content, encoding="utf-8")
 
-    is_valid, error_message = check_commit_message(filepath)
+    is_valid, error_message = check_commit_message(str(filepath))
     assert not is_valid
     assert (
         error_message
@@ -82,29 +89,61 @@ def test_check_commit_message_invalid_no_jira(mock_get_branch_name):
     )
 
 
-def test_check_commit_message_invalid_different_jira(mock_get_branch_name):
+def test_check_commit_message_invalid_different_jira(
+    mock_get_branch_name, tmp_path: Path
+):
     """Test with different JIRA id in the branch name and in the message content"""
     branch_name = "GEOPY-123_fix_bug"
     mock_get_branch_name(branch_name)
     message_content = "GI-456 Fix a bug"
-    filepath = "test_commit_message.txt"
-    with open(filepath, "w") as f:
-        f.write(message_content)
+    filepath = tmp_path / "test_commit_message.txt"
+    filepath.write_text(message_content, encoding="utf-8")
 
-    is_valid, error_message = check_commit_message(filepath)
+    is_valid, error_message = check_commit_message(str(filepath))
     assert not is_valid
     assert error_message.startswith("Different JIRA ID in commit message")
 
 
-def test_check_commit_message_invalid_short_message(mock_get_branch_name):
+def test_check_commit_message_invalid_short_message(
+    mock_get_branch_name, tmp_path: Path
+):
     """Test with a too short message content"""
     branch_name = "GEOPY-123_fix_bug"
     mock_get_branch_name(branch_name)
     message_content = "Fix"
-    filepath = "test_commit_message.txt"
-    with open(filepath, "w") as f:
-        f.write(message_content)
+    filepath = tmp_path / "test_commit_message.txt"
+    filepath.write_text(message_content, encoding="utf-8")
 
-    is_valid, error_message = check_commit_message(filepath)
+    is_valid, error_message = check_commit_message(str(filepath))
     assert not is_valid
     assert error_message.startswith("First line of commit message must be at least")
+
+
+def test_main_calls_prepare_commit_msg():
+    test_args = ["script_name", "--prepare", "msg_file"]
+    with mock.patch.object(sys, "argv", test_args):
+        with mock.patch(
+            "mirageoscience.hooks.git_message_hook.prepare_commit_msg"
+        ) as mock_prepare_commit_msg:
+            git_message_hook_main()
+            mock_prepare_commit_msg.assert_called_once_with("msg_file", *[])
+
+
+def test_main_calls_check_commit_msg():
+    test_args = ["script_name", "--check", "msg_file"]
+    with mock.patch.object(sys, "argv", test_args):
+        with mock.patch(
+            "mirageoscience.hooks.git_message_hook.check_commit_msg"
+        ) as mock_check_commit_msg:
+            git_message_hook_main()
+            mock_check_commit_msg.assert_called_once_with("msg_file")
+
+
+def test_main_with_remaining_args():
+    test_args = ["script_name", "--prepare", "msg_file", "arg1", "arg2"]
+    with mock.patch.object(sys, "argv", test_args):
+        with mock.patch(
+            "mirageoscience.hooks.git_message_hook.prepare_commit_msg"
+        ) as mock_prepare_commit_msg:
+            git_message_hook_main()
+            mock_prepare_commit_msg.assert_called_once_with("msg_file", "arg1", "arg2")
