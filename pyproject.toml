@@ -82,10 +82,8 @@ check_untyped_defs = true
 
 [tool.coverage.run]
 branch = true
-source = ["my_app"]
-omit = [
-    "my_app/commands/hello_world.py"
-]
+source = ["mirageoscience"]
+omit = []
 
 [tool.coverage.report]
 exclude_lines = [
@@ -95,7 +93,7 @@ exclude_lines = [
     "pragma: no cover"
 ]
 
-fail_under = 80
+fail_under = 90
 
 [tool.coverage.html]
 skip_empty = true
