@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import pytest
 
-from mirageoscience.hooks.git_message_hook import *
+from mirageoscience.hooks.git_message_hook import (
+    check_commit_message,
+    get_jira_id,
+    get_message_prefix_bang,
+)
 
 
 @pytest.fixture

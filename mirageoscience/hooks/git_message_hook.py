@@ -168,7 +168,7 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
 
 
 def check_commit_msg(filepath: str) -> None:
-    """To be used a the Git commit-msg hook.
+    """To be used as the Git commit-msg hook.
 
     Exit with non-0 status if the commit message is deemed invalid.
     """
@@ -183,7 +183,7 @@ def check_commit_msg(filepath: str) -> None:
 
 
 def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
-    """To be used a the Git prepare-commit-msg hook.
+    """To be used as the Git prepare-commit-msg hook.
 
     Will add the JIRA ID found in the branch name in case it is missing from the commit
     message.
