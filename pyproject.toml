@@ -1,12 +1,25 @@
-[tool.poetry]
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+
+[project]
 name = "mirageoscience.pre-commit-hooks"
 
 version = "1.1.0"
 
+dynamic = ["dependencies"]
+
+requires-python = ">=3.10,<4.0"
+
+
 license = "MIT"
 description = ""
-repository = "https://github.com/MiraGeoscience/pre-commit-hooks"
-authors = ["Mira Geoscience <support@mirageoscience.com>"]
+
+authors = [
+    { name = "Mira Geoscience", email = "support@mirageoscience.com" }
+]
 readme = "README.rst"
 
 include = [
@@ -17,6 +30,10 @@ include = [
 packages = [
     { include = "mirageoscience/hooks" }
 ]
+
+[project.urls]
+repository = "https://github.com/MiraGeoscience/pre-commit-hooks"
+
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -30,7 +47,7 @@ pytest-mock = "*"
 pytest-cov = "*"
 tomli = "*"
 
-[tool.poetry.scripts]
+[project.scripts]
 check_copyright = "mirageoscience.hooks.check_copyright:main"
 git_message_hook = "mirageoscience.hooks.git_message_hook:main"
 
@@ -99,6 +116,3 @@ fail_under = 60
 skip_empty = true
 skip_covered = true
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
