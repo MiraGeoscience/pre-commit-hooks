@@ -23,7 +23,7 @@ def get_pyproject_version():
     with open(str(path), encoding="utf-8") as file:
         pyproject = toml.loads(file.read())
 
-    return pyproject["tool"]["poetry"]["version"]
+    return pyproject["project"]["version"]
 
 
 def test_version_is_consistent():
