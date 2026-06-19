@@ -14,9 +14,8 @@
 from __future__ import annotations
 
 import argparse
+import pathlib
 import re
-import shlex
-import subprocess
 import sys
 
 
@@ -67,41 +66,48 @@ def get_message_prefix_bang(line: str) -> str:
     return match.group(1) if match else ""
 
 
+def _get_git_dir() -> pathlib.Path | None:
+    """Resolve the actual git directory, handling both normal repos and worktrees.
+
+    In a normal repo, `.git` is a directory.
+    In a worktree, `.git` is a file containing "gitdir: <path>".
+    """
+    git_path = pathlib.Path(".git")
+    if not git_path.exists():
+        return None
+    if git_path.is_dir():
+        return git_path.resolve()
+    # worktree: .git is a file
+    content = git_path.read_text(encoding="utf-8").strip()
+    if content.startswith("gitdir:"):
+        git_dir_path = pathlib.Path(content[len("gitdir:"):].strip())
+        return git_dir_path.resolve()
+    return None
+
+
 def get_branch_name() -> str | None:
     """:return: the name of the current branch"""
-
-    git_proc = subprocess.run(
-        shlex.split("git branch --list"), stdout=subprocess.PIPE, text=True, check=False
-    )
-
-    if git_proc.returncode != 0:
+    git_dir = _get_git_dir()
+    if git_dir is None:
         return None
 
-    current_branch = None
-    # current branch is prefixed by '*'
-    for line in git_proc.stdout.splitlines():
-        stripped = line.strip()
-        if stripped and stripped[0] == "*":
-            current_branch = stripped[1:]
-            break
-    assert current_branch is not None
+    head_file = git_dir / "HEAD"
+    if not head_file.exists():
+        return None
 
-    class RebasingPattern:
-        """Internal class that encapsulates the regular expression for the rebasing
-        message pattern, making sure it gets compiled only once."""
+    content = head_file.read_text(encoding="utf-8").strip()
+    if content.startswith("ref: refs/heads/"):
+        return content[len("ref: refs/heads/"):]
 
-        __pattern = re.compile(r"\(.*\s(\S+)\s*\)")
+    # Detached HEAD or active rebase: check rebase state files
+    for rebase_dir in ("rebase-merge", "rebase-apply"):
+        head_name_file = git_dir / rebase_dir / "head-name"
+        if head_name_file.exists():
+            ref = head_name_file.read_text(encoding="utf-8").strip()
+            if ref.startswith("refs/heads/"):
+                return ref[len("refs/heads/"):]
 
-        @staticmethod
-        def get():
-            """:return: the compiled regular expression for the Rebasing pattern"""
-            return RebasingPattern.__pattern
-
-    match = re.match(RebasingPattern.get(), current_branch.strip())
-    if match:
-        return match.group(1)
-
-    return current_branch
+    return None  # detached HEAD with no active rebase
 
 
 def check_commit_message(filepath: str) -> tuple[bool, str]:

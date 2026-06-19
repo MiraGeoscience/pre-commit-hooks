@@ -16,7 +16,9 @@ from unittest import mock
 import pytest
 
 from mirageoscience.hooks.git_message_hook import (
+    _get_git_dir,
     check_commit_message,
+    get_branch_name,
     get_jira_id,
     get_message_prefix_bang,
 )
@@ -147,3 +149,127 @@ def test_main_with_remaining_args():
         ) as mock_prepare_commit_msg:
             git_message_hook_main()
             mock_prepare_commit_msg.assert_called_once_with("msg_file", "arg1", "arg2")
+
+
+class TestGetGitDir:
+    def test_no_git(self, tmp_path: Path, monkeypatch):
+        """Returns None when there is no .git entry at all."""
+        monkeypatch.chdir(tmp_path)
+        assert _get_git_dir() is None
+
+    def test_normal_repo(self, tmp_path: Path, monkeypatch):
+        """Returns the .git directory for a normal (non-worktree) repo."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        assert _get_git_dir() == git_dir
+
+    def test_worktree(self, tmp_path: Path, monkeypatch):
+        """Follows the gitdir: pointer written by git worktree."""
+        # Simulate the real git dir living elsewhere
+        real_git_dir = tmp_path / "main_repo" / ".git" / "worktrees" / "my-worktree"
+        real_git_dir.mkdir(parents=True)
+
+        worktree_root = tmp_path / "worktree"
+        worktree_root.mkdir()
+        (worktree_root / ".git").write_text(
+            f"gitdir: {real_git_dir}\n", encoding="utf-8"
+        )
+
+        monkeypatch.chdir(worktree_root)
+        assert _get_git_dir() == real_git_dir
+
+
+class TestGetBranchName:
+    def test_normal_repo_on_branch(self, tmp_path: Path, monkeypatch):
+        """Reads the branch name from HEAD in a normal repo."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/GA-1234\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        assert get_branch_name() == "GA-1234"
+
+    def test_normal_repo_detached_head(self, tmp_path: Path, monkeypatch):
+        """Returns None for a detached HEAD with no active rebase."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text(
+            "abc123def456abc123def456abc123def456abc123\n", encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        assert get_branch_name() is None
+
+    def test_normal_repo_rebase_merge(self, tmp_path: Path, monkeypatch):
+        """Returns the original branch name during an active rebase-merge."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        # HEAD points to a commit SHA during a rebase
+        (git_dir / "HEAD").write_text(
+            "abc123def456abc123def456abc123def456abc123\n", encoding="utf-8"
+        )
+        rebase_dir = git_dir / "rebase-merge"
+        rebase_dir.mkdir()
+        (rebase_dir / "head-name").write_text(
+            "refs/heads/GA-5678\n", encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        assert get_branch_name() == "GA-5678"
+
+    def test_normal_repo_rebase_apply(self, tmp_path: Path, monkeypatch):
+        """Returns the original branch name during an active rebase-apply (git am)."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text(
+            "abc123def456abc123def456abc123def456abc123\n", encoding="utf-8"
+        )
+        rebase_dir = git_dir / "rebase-apply"
+        rebase_dir.mkdir()
+        (rebase_dir / "head-name").write_text(
+            "refs/heads/feature/my-feature\n", encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        assert get_branch_name() == "feature/my-feature"
+
+    def test_worktree_on_branch(self, tmp_path: Path, monkeypatch):
+        """Reads the branch name through the worktree gitdir: pointer."""
+        real_git_dir = tmp_path / "main_repo" / ".git" / "worktrees" / "my-worktree"
+        real_git_dir.mkdir(parents=True)
+        (real_git_dir / "HEAD").write_text(
+            "ref: refs/heads/GA-9999\n", encoding="utf-8"
+        )
+
+        worktree_root = tmp_path / "worktree"
+        worktree_root.mkdir()
+        (worktree_root / ".git").write_text(
+            f"gitdir: {real_git_dir}\n", encoding="utf-8"
+        )
+
+        monkeypatch.chdir(worktree_root)
+        assert get_branch_name() == "GA-9999"
+
+    def test_worktree_rebase_merge(self, tmp_path: Path, monkeypatch):
+        """Reads the rebase branch name through the worktree gitdir: pointer."""
+        real_git_dir = tmp_path / "main_repo" / ".git" / "worktrees" / "my-worktree"
+        real_git_dir.mkdir(parents=True)
+        (real_git_dir / "HEAD").write_text(
+            "abc123def456abc123def456abc123def456abc123\n", encoding="utf-8"
+        )
+        rebase_dir = real_git_dir / "rebase-merge"
+        rebase_dir.mkdir()
+        (rebase_dir / "head-name").write_text(
+            "refs/heads/GA-7777\n", encoding="utf-8"
+        )
+
+        worktree_root = tmp_path / "worktree"
+        worktree_root.mkdir()
+        (worktree_root / ".git").write_text(
+            f"gitdir: {real_git_dir}\n", encoding="utf-8"
+        )
+
+        monkeypatch.chdir(worktree_root)
+        assert get_branch_name() == "GA-7777"
+
+    def test_no_git(self, tmp_path: Path, monkeypatch):
+        """Returns None when there is no .git entry."""
+        monkeypatch.chdir(tmp_path)
+        assert get_branch_name() is None
