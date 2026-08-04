@@ -6,8 +6,8 @@ fail_fast: false
 
 ci:
     skip: [pylint]
-    autoupdate_branch: develop
-    autoupdate_schedule: monthly
+    autoupdate_branch: main
+    autoupdate_schedule: quarterly
 
 repos:
 -   repo: https://github.com/python-poetry/poetry
