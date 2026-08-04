@@ -19,3 +19,15 @@ updates:
         patterns:
           - MiraGeoscience/CI-tools/.github/actions/*
           - MiraGeoscience/CI-tools/.github/workflows/*
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 4
+    #ignore:
+    #  - dependency-name: "https://github.com/pre-commit/#mirrors-mypy"
+    groups:
+      pre-commit-hooks:
+        patterns:
+          - "*"
