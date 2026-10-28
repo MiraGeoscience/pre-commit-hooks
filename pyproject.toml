@@ -1,7 +1,27 @@
-[tool.poetry]
-name = "mirageoscience.pre-commit-hooks"
+[build-system]
+requires = [
+    "poetry-core>=1.8.0",
+    "poetry-dynamic-versioning>=1.9.1,<2.0",
+]
+build-backend = "poetry_dynamic_versioning.backend"
 
-version = "1.1.0"
+[project]
+name = "mirageoscience.pre-commit-hooks"
+requires-python = ">=3.10,<4.0"
+dynamic = ["version"]
+
+[dependency-groups]
+dev = [
+    "Pygments",
+    "pylint",
+    "pylint-pytest",
+    "pytest",
+    "pytest-mock",
+    "pytest-cov",
+    "tomli",
+]
+
+[tool.poetry]
 
 license = "MIT"
 description = ""
@@ -11,28 +31,48 @@ readme = "README.rst"
 
 include = [
     "LICENSE",
-    "README.rst"
+    "README.rst",
+    { path = "mirageoscience/hooks/_version.py", format = ["sdist", "wheel"] },
 ]
 
 packages = [
     { include = "mirageoscience/hooks" }
 ]
-
-[tool.poetry.dependencies]
-python = "^3.10"
-
-[tool.poetry.group.dev.dependencies]
-Pygments = "*"
-pylint = "*"
-pylint-pytest = "*"
-pytest = "*"
-pytest-mock = "*"
-pytest-cov = "*"
-tomli = "*"
+version = "0.0.0.dev0"
 
 [tool.poetry.scripts]
 check_copyright = "mirageoscience.hooks.check_copyright:main"
 git_message_hook = "mirageoscience.hooks.git_message_hook:main"
+
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.9.1,<2.0.0", extras = ["plugin"] }
+
+[tool.poetry-dynamic-versioning]
+bump = true
+enable = true
+fix-shallow-repository = true
+strict = true
+style = "pep440"
+vcs = "git"
+
+[tool.poetry-dynamic-versioning.substitution]
+files = ["mirageoscience/hooks/_version.py", "_version.json"]
+patterns = [
+    '''(^__version__\s*(?::.*?)?=\s*['"])[^'"]*(['"])''',
+    '''(^{\s*"version"\s*:\s*")[^"]*("\s*})''',
+]
+
+[tool.poetry-dynamic-versioning.files."mirageoscience/hooks/_version.py"]
+persistent-substitution = true
+initial-content = """
+__version__ = "0.0.0.dev0"
+"""
+
+[tool.poetry-dynamic-versioning.files."_version.json"]
+persistent-substitution = true
+initial-content = """
+{ "version": "0.0.0.dev0" }
+"""
 
 [tool.ruff]
 target-version = "py310"
@@ -98,7 +138,3 @@ fail_under = 60
 [tool.coverage.html]
 skip_empty = true
 skip_covered = true
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

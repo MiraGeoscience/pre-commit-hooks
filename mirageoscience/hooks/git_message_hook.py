@@ -80,7 +80,7 @@ def _get_git_dir() -> pathlib.Path | None:
     # worktree: .git is a file
     content = git_path.read_text(encoding="utf-8").strip()
     if content.startswith("gitdir:"):
-        git_dir_path = pathlib.Path(content[len("gitdir:"):].strip())
+        git_dir_path = pathlib.Path(content[len("gitdir:") :].strip())
         return git_dir_path.resolve()
     return None
 
@@ -97,7 +97,7 @@ def get_branch_name() -> str | None:
 
     content = head_file.read_text(encoding="utf-8").strip()
     if content.startswith("ref: refs/heads/"):
-        return content[len("ref: refs/heads/"):]
+        return content[len("ref: refs/heads/") :]
 
     # Detached HEAD or active rebase: check rebase state files
     for rebase_dir in ("rebase-merge", "rebase-apply"):
@@ -105,7 +105,7 @@ def get_branch_name() -> str | None:
         if head_name_file.exists():
             ref = head_name_file.read_text(encoding="utf-8").strip()
             if ref.startswith("refs/heads/"):
-                return ref[len("refs/heads/"):]
+                return ref[len("refs/heads/") :]
 
     return None  # detached HEAD with no active rebase
 

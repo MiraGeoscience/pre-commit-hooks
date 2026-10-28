@@ -209,9 +209,7 @@ class TestGetBranchName:
         )
         rebase_dir = git_dir / "rebase-merge"
         rebase_dir.mkdir()
-        (rebase_dir / "head-name").write_text(
-            "refs/heads/GA-5678\n", encoding="utf-8"
-        )
+        (rebase_dir / "head-name").write_text("refs/heads/GA-5678\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         assert get_branch_name() == "GA-5678"
 
@@ -256,9 +254,7 @@ class TestGetBranchName:
         )
         rebase_dir = real_git_dir / "rebase-merge"
         rebase_dir.mkdir()
-        (rebase_dir / "head-name").write_text(
-            "refs/heads/GA-7777\n", encoding="utf-8"
-        )
+        (rebase_dir / "head-name").write_text("refs/heads/GA-7777\n", encoding="utf-8")
 
         worktree_root = tmp_path / "worktree"
         worktree_root.mkdir()
