@@ -25,8 +25,8 @@ from mirageoscience.hooks.git_message_hook import (
 )
 
 
-@pytest.fixture
-def mock_get_branch_name(mocker):
+@pytest.fixture(name="mock_get_branch_name")
+def fixture_mock_get_branch_name(mocker):
     def _mock_get_branch_name(branch_name):
         mocker.patch(
             "mirageoscience.hooks.git_message_hook.get_branch_name",

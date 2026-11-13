@@ -1,14 +1,20 @@
-[tool.poetry]
+[project]
 name = "mirageoscience.pre-commit-hooks"
-
 version = "1.1.0"
-
-license = "MIT"
 description = ""
-repository = "https://github.com/MiraGeoscience/pre-commit-hooks"
-authors = ["Mira Geoscience <support@mirageoscience.com>"]
 readme = "README.rst"
+license = "MIT"
+authors = [{ name = "Mira Geoscience", email = "support@mirageoscience.com" }]
+requires-python = ">=3.10,<4.0"
 
+[project.urls]
+Repository = "https://github.com/MiraGeoscience/pre-commit-hooks"
+
+[project.scripts]
+check_copyright = "mirageoscience.hooks.check_copyright:main"
+git_message_hook = "mirageoscience.hooks.git_message_hook:main"
+
+[tool.poetry]
 include = [
     "LICENSE",
     "README.rst"
@@ -18,21 +24,15 @@ packages = [
     { include = "mirageoscience/hooks" }
 ]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-
-[tool.poetry.group.dev.dependencies]
-Pygments = "*"
-pylint = "*"
-pylint-pytest = "*"
-pytest = "*"
-pytest-mock = "*"
-pytest-cov = "*"
-tomli = "*"
-
-[tool.poetry.scripts]
-check_copyright = "mirageoscience.hooks.check_copyright:main"
-git_message_hook = "mirageoscience.hooks.git_message_hook:main"
+[dependency-groups]
+dev = [
+"Pygments",
+"pylint",
+"pytest",
+"pytest-mock",
+"pytest-cov",
+"tomli",
+]
 
 [tool.ruff]
 target-version = "py310"
