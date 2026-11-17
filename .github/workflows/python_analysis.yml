@@ -34,6 +34,16 @@ jobs:
       package-manager: 'poetry'
       app-name: 'mirageoscience'
       python-version: '3.14'
+  # Also verify the pre-commit hook via CI-tools; pre-commit.ci runs it separately.
+  call-workflow-pre-commit:
+    name: Pre-Commit
+    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-pre_commit.yml@edb72d7524d25db3b4eb976890eb6837a8eb39f8 # v4.0.1
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      app-name: 'mirageoscience'
+      python-version: '3.14'
   call-workflow-pytest:
     name: Pytest
     uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-pytest.yml@edb72d7524d25db3b4eb976890eb6837a8eb39f8 # v4.0.1
