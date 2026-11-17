@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import re
 import sys
@@ -67,11 +68,15 @@ def get_message_prefix_bang(line: str) -> str:
 
 
 def _get_git_dir() -> pathlib.Path | None:
-    """Resolve the actual git directory, handling both normal repos and worktrees.
+    """Resolve the actual git directory, handling GIT_DIR and worktrees.
 
     In a normal repo, `.git` is a directory.
     In a worktree, `.git` is a file containing "gitdir: <path>".
     """
+    git_dir = os.environ.get("GIT_DIR")
+    if git_dir:
+        return pathlib.Path(git_dir).resolve()
+
     git_path = pathlib.Path(".git")
     if not git_path.exists():
         return None
@@ -81,6 +86,8 @@ def _get_git_dir() -> pathlib.Path | None:
     content = git_path.read_text(encoding="utf-8").strip()
     if content.startswith("gitdir:"):
         git_dir_path = pathlib.Path(content[len("gitdir:") :].strip())
+        if not git_dir_path.is_absolute():
+            git_dir_path = git_path.parent / git_dir_path
         return git_dir_path.resolve()
     return None
 
