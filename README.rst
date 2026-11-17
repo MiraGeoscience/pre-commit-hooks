@@ -41,6 +41,52 @@ Example of ``.pre-commit-config.yamnl``:
       -  id: prepare-commit-msg
       -  id: check-commit-msg
 
+Issue trailers
+^^^^^^^^^^^^^^
+
+By default, the message hooks use a JIRA ID at the beginning of the commit
+subject. To use an ``Issue: GA-1234`` footer trailer instead, enable
+``--issue-trailer`` on both hooks:
+
+.. code:: yaml
+
+   hooks:
+   -  id: prepare-commit-msg
+      args: [--issue-trailer]
+   -  id: check-commit-msg
+      args: [--issue-trailer]
+
+For example, a prepared message would be:
+
+.. code:: text
+
+   Fix the coordinate transformation
+
+   Explain the change here.
+
+   Issue: GA-1234
+
+In this mode, preparation leaves the subject unchanged and adds the branch's
+JIRA ID as an Issue trailer only when no Issue trailer already exists. Existing
+trailers and the message body are retained.
+Trailers form the final block of colon-separated fields, separated from the subject
+or body by a blank line; indented continuation lines are supported.
+An ID in the subject, body, ``#`` template comments, or patch text does not count
+as an Issue trailer.
+
+The hooks handle trailers directly in Python, without starting Git. They use
+fixed ``Issue:`` syntax and do not read Git's ``trailer.*`` configuration settings
+for custom keys, separators, insertion order, duplicate handling, or commands
+that generate trailer values. No Git trailer configuration is required.
+Those settings still apply when using Git's own trailer commands.
+
+Validation uses Issue trailers instead of subject prefixes. Each Issue trailer
+must contain a valid JIRA ID, and IDs must match the branch's ID when one exists,
+except during rebases or cherry-picks. As in subject mode, the branch's ID alone
+can satisfy the JIRA requirement. Summary length is measured on the subject
+without counting trailer text. The existing rebase and cherry-pick exceptions
+apply in both modes.
+
 License
 ^^^^^^^
 

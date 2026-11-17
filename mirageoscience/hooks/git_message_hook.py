@@ -20,6 +20,9 @@ import re
 import sys
 
 
+_TRAILER_LINE = re.compile(r"([A-Za-z0-9-]+)[ \t]*:[ \t]*(.*)")
+
+
 def get_jira_id(text) -> str:
     """Detect a JIRA issue ID at the begging of the given text.
 
@@ -134,12 +137,81 @@ def get_branch_name() -> str | None:
     return None  # detached HEAD with no active rebase
 
 
-def check_commit_message(filepath: str) -> tuple[bool, str]:
+def _get_trailer_block(lines: list[str]) -> tuple[int, int]:
+    """Find the final trailer paragraph before template comments or patch text."""
+    end = len(lines)
+    for index, line in enumerate(lines):
+        if (
+            line.rstrip("\r\n") == "---"
+            or line.startswith("# ------------------------ >8 ")
+            or line.startswith("diff --git ")
+        ):
+            end = index
+            break
+    while end and (not lines[end - 1].strip() or lines[end - 1].startswith("#")):
+        end -= 1
+    start = end
+    while start and lines[start - 1].strip():
+        start -= 1
+    if start == 0:
+        return end, end
+
+    has_trailer = False
+    for line in lines[start:end]:
+        if line.startswith("#"):
+            continue
+        if _TRAILER_LINE.fullmatch(line.rstrip("\r\n")):
+            has_trailer = True
+        elif not (has_trailer and line.startswith((" ", "\t"))):
+            return end, end
+    return (start, end) if has_trailer else (end, end)
+
+
+def _get_issue_trailers(message: str) -> list[str]:
+    """Read Issue values from the final block of colon-separated trailers."""
+    lines = message.splitlines(keepends=True)
+    start, end = _get_trailer_block(lines)
+    issues = []
+    current_issue = False
+    for line in lines[start:end]:
+        if line.startswith("#"):
+            continue
+        match = _TRAILER_LINE.fullmatch(line.rstrip("\r\n"))
+        if match:
+            current_issue = match.group(1).lower() == "issue"
+            if current_issue:
+                issues.append(match.group(2).strip())
+        elif current_issue:
+            issues[-1] = f"{issues[-1]} {line.strip()}".strip()
+    return issues
+
+
+def _prepare_issue_trailer(filepath: str, branch_jira_id: str) -> None:
+    """Append a missing Issue trailer without changing the commit subject."""
+    message_path = pathlib.Path(filepath)
+    message = message_path.read_text(encoding="utf-8")
+    if _get_issue_trailers(message):
+        return
+
+    lines = message.splitlines(keepends=True)
+    start, end = _get_trailer_block(lines)
+    prefix = "".join(lines[:end]).rstrip("\r\n")
+    suffix = "".join(lines[end:]).lstrip("\r\n")
+    separator = "\n\n" if start == end else "\n"
+    message_path.write_text(
+        f"{prefix}{separator}Issue: {branch_jira_id}\n{suffix}", encoding="utf-8"
+    )
+
+
+def check_commit_message(
+    filepath: str, *, issue_trailer: bool = False
+) -> tuple[bool, str]:
     """Check if the branch name or the commit message starts with a reference to JIRA,
     and if the message meets the minimum required length for the summary line.
 
     The JIRA reference has to be at the beginning of the branch name, or of the commit
-    message. Summary length is not checked during a rebase or cherry-pick.
+    message, or in an Issue trailer when issue_trailer is enabled. Summary length
+    is not checked during a rebase or cherry-pick.
     :return: a tuple telling whether the commit message is valid or not, and an error
         message (empty in case the message is valid).
     """
@@ -149,19 +221,29 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
     if branch_name:
         branch_jira_id = get_jira_id(branch_name)
 
-    message_jira_id = ""
     first_line = None
     with open(filepath, encoding="utf-8") as message_file:
-        for line in message_file:
-            if not line.startswith("#") and len(line.strip()) > 0:
-                # test only the first non-comment line that is not empty
-                # (should we reject messages with empty first line?)
-                first_line = line.strip()
-                prefix_bang = get_message_prefix_bang(first_line)
-                first_line = first_line[len(prefix_bang) :].strip()
-                message_jira_id = get_jira_id(first_line)
-                break
+        message = message_file.read()
+    for line in message.splitlines():
+        # In trailer mode, a blank subject must not make its footer count as the summary.
+        if not line.startswith("#") and (issue_trailer or len(line.strip()) > 0):
+            first_line = line.strip()
+            prefix_bang = get_message_prefix_bang(first_line)
+            first_line = first_line[len(prefix_bang) :].strip()
+            break
     assert first_line is not None
+
+    if issue_trailer:
+        message_jira_ids = _get_issue_trailers(message)
+        if any(not value or get_jira_id(value) != value for value in message_jira_ids):
+            return False, "Each Issue trailer must contain a valid JIRA ID."
+    else:
+        header_jira_id = get_jira_id(first_line)
+        message_jira_ids = [header_jira_id] if header_jira_id else []
+    message_jira_id = next(
+        (jira_id for jira_id in message_jira_ids if jira_id != branch_jira_id),
+        message_jira_ids[0] if message_jira_ids else "",
+    )
 
     if (
         not branch_jira_id
@@ -173,7 +255,12 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
     ):
         return (
             False,
-            "Either the branch name or the commit message must start with a JIRA ID.",
+            (
+                "Either the branch name must start with a JIRA ID "
+                "or the commit message must contain an Issue trailer with a JIRA ID."
+                if issue_trailer
+                else "Either the branch name or the commit message must start with a JIRA ID."
+            ),
         )
 
     if (
@@ -182,16 +269,17 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
         and branch_jira_id != message_jira_id
         and not _is_replay_in_progress()
     ):
+        location = "Issue trailer" if issue_trailer else "commit message"
         return (
             False,
-            f"Different JIRA ID in commit message {message_jira_id} "
+            f"Different JIRA ID in {location} {message_jira_id} "
             f"and in branch name {branch_jira_id}.",
         )
 
     stripped_message_line = ""
     if first_line:
         stripped_message_line = first_line.strip()
-        if message_jira_id:
+        if message_jira_id and not issue_trailer:
             stripped_message_line = stripped_message_line[
                 len(message_jira_id) + 1 :
             ].strip()
@@ -204,19 +292,21 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
         return (
             False,
             f"First line of commit message must be at least {min_required_length} characters long, "
-            "beyond the JIRA ID.",
+            + ("in the subject." if issue_trailer else "beyond the JIRA ID."),
         )
 
     return True, ""
 
 
-def check_commit_msg(filepath: str) -> None:
+def check_commit_msg(filepath: str, *, issue_trailer: bool = False) -> None:
     """To be used as the Git commit-msg hook.
 
     Exit with non-0 status if the commit message is deemed invalid.
     """
 
-    (is_valid, error_message) = check_commit_message(filepath)
+    (is_valid, error_message) = check_commit_message(
+        filepath, issue_trailer=issue_trailer
+    )
     if not is_valid:
         print(
             f"""commit-msg hook: **ERROR** {error_message}
@@ -226,7 +316,11 @@ def check_commit_msg(filepath: str) -> None:
 
 
 def prepare_commit_msg(
-    filepath: str, source: str | None = None, _commit_id: str | None = None
+    filepath: str,
+    source: str | None = None,
+    _commit_id: str | None = None,
+    *,
+    issue_trailer: bool = False,
 ) -> None:
     """To be used as the Git prepare-commit-msg hook.
 
@@ -234,6 +328,8 @@ def prepare_commit_msg(
     message. During a rebase or cherry-pick, this also handles reused commit messages
     and preserves any JIRA ID already in that message. Git may supply an unused
     third argument identifying the original commit.
+
+    With issue_trailer enabled, use an Issue trailer instead of the subject line.
     """
 
     branch_jira_id = ""
@@ -247,6 +343,10 @@ def prepare_commit_msg(
     if source not in [None, "message", "template"] and not (
         source in ["commit", "merge"] and _is_replay_in_progress()
     ):
+        return
+
+    if issue_trailer:
+        _prepare_issue_trailer(filepath, branch_jira_id)
         return
 
     prefix_bang = ""
@@ -288,10 +388,15 @@ def main():
         action="store_true",
         help="check if the commit message is valid",
     )
+    parser.add_argument(
+        "--issue-trailer",
+        action="store_true",
+        help="use an Issue trailer for the JIRA ID instead of the commit subject",
+    )
     parser.add_argument("args", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
     if args.prepare:
-        prepare_commit_msg(args.msg_file, *args.args)
+        prepare_commit_msg(args.msg_file, *args.args, issue_trailer=args.issue_trailer)
     elif args.check:
-        check_commit_msg(args.msg_file)
+        check_commit_msg(args.msg_file, issue_trailer=args.issue_trailer)

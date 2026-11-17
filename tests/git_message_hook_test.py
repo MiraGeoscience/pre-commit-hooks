@@ -129,7 +129,9 @@ def test_main_calls_prepare_commit_msg():
             "mirageoscience.hooks.git_message_hook.prepare_commit_msg"
         ) as mock_prepare_commit_msg:
             git_message_hook_main()
-            mock_prepare_commit_msg.assert_called_once_with("msg_file", *[])
+            mock_prepare_commit_msg.assert_called_once_with(
+                "msg_file", issue_trailer=False
+            )
 
 
 def test_main_calls_check_commit_msg():
@@ -139,7 +141,9 @@ def test_main_calls_check_commit_msg():
             "mirageoscience.hooks.git_message_hook.check_commit_msg"
         ) as mock_check_commit_msg:
             git_message_hook_main()
-            mock_check_commit_msg.assert_called_once_with("msg_file")
+            mock_check_commit_msg.assert_called_once_with(
+                "msg_file", issue_trailer=False
+            )
 
 
 def test_main_with_remaining_args():
@@ -149,7 +153,9 @@ def test_main_with_remaining_args():
             "mirageoscience.hooks.git_message_hook.prepare_commit_msg"
         ) as mock_prepare_commit_msg:
             git_message_hook_main()
-            mock_prepare_commit_msg.assert_called_once_with("msg_file", "arg1", "arg2")
+            mock_prepare_commit_msg.assert_called_once_with(
+                "msg_file", "arg1", "arg2", issue_trailer=False
+            )
 
 
 class TestGetGitDir:
@@ -292,41 +298,59 @@ class TestPrepareCommitMsg:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("GIT_DIR", str(git_dir))
 
+    @pytest.mark.parametrize("issue_trailer", [False, True])
     def test_rebase_commit_without_jira_gets_branch_jira(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, issue_trailer: bool
     ):
         self._set_up_rebase_git_dir(tmp_path, monkeypatch)
         message_file = tmp_path / "COMMIT_EDITMSG"
         message_file.write_text("An original commit message\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            ["git_message_hook", "--prepare", str(message_file), "commit", "HEAD"],
-        )
+        args = ["git_message_hook", "--prepare"]
+        if issue_trailer:
+            args.append("--issue-trailer")
+        args.extend([str(message_file), "commit", "HEAD"])
+        monkeypatch.setattr(sys, "argv", args)
         git_message_hook_main()
 
-        assert message_file.read_text(encoding="utf-8") == (
-            "[GA-5678] An original commit message\n"
+        expected_message = (
+            "An original commit message\n\nIssue: GA-5678\n"
+            if issue_trailer
+            else "[GA-5678] An original commit message\n"
         )
+        assert message_file.read_text(encoding="utf-8") == expected_message
 
+    @pytest.mark.parametrize("issue_trailer", [False, True])
     def test_rebase_commit_with_different_jira_is_preserved(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, issue_trailer: bool
     ):
         self._set_up_rebase_git_dir(tmp_path, monkeypatch)
         message_file = tmp_path / "COMMIT_EDITMSG"
-        original_message = "[GI-1234] An original commit message\n"
+        original_message = (
+            "An original commit message\n\nIssue: GI-1234\n"
+            if issue_trailer
+            else "[GI-1234] An original commit message\n"
+        )
         message_file.write_text(original_message, encoding="utf-8")
 
-        prepare_commit_msg(str(message_file), "commit")
+        prepare_commit_msg(str(message_file), "commit", issue_trailer=issue_trailer)
 
         assert message_file.read_text(encoding="utf-8") == original_message
-        assert check_commit_message(str(message_file)) == (True, "")
+        assert check_commit_message(str(message_file), issue_trailer=issue_trailer) == (
+            True,
+            "",
+        )
 
     @pytest.mark.parametrize("source", ["message", "commit", "merge"])
     @pytest.mark.parametrize("has_jira", [False, True])
+    @pytest.mark.parametrize("issue_trailer", [False, True])
     def test_cherry_pick_message(
-        self, tmp_path: Path, monkeypatch, source: str, has_jira: bool
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        source: str,
+        has_jira: bool,
+        issue_trailer: bool,
     ):
         git_dir = tmp_path / "alternate_git_dir"
         git_dir.mkdir()
@@ -335,20 +359,29 @@ class TestPrepareCommitMsg:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("GIT_DIR", str(git_dir))
         message_file = tmp_path / "COMMIT_EDITMSG"
-        original_message = (
-            "[GI-1234] An original commit message\n"
-            if has_jira
-            else "An original commit message\n"
-        )
+        original_message = "An original commit message\n"
+        if has_jira:
+            original_message = (
+                f"{original_message}\nIssue: GI-1234\n"
+                if issue_trailer
+                else f"[GI-1234] {original_message}"
+            )
         message_file.write_text(original_message, encoding="utf-8")
 
-        prepare_commit_msg(str(message_file), source)
+        prepare_commit_msg(str(message_file), source, issue_trailer=issue_trailer)
 
-        expected_message = (
-            original_message if has_jira else f"[GA-5678] {original_message}"
-        )
+        expected_message = original_message
+        if not has_jira:
+            expected_message = (
+                f"{original_message}\nIssue: GA-5678\n"
+                if issue_trailer
+                else f"[GA-5678] {original_message}"
+            )
         assert message_file.read_text(encoding="utf-8") == expected_message
-        assert check_commit_message(str(message_file)) == (True, "")
+        assert check_commit_message(str(message_file), issue_trailer=issue_trailer) == (
+            True,
+            "",
+        )
 
     @pytest.mark.parametrize("source", ["merge", "commit"])
     def test_non_replay_message_is_unchanged(
@@ -375,8 +408,9 @@ class TestPrepareCommitMsg:
     @pytest.mark.parametrize(
         "operation", ["rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", None]
     )
+    @pytest.mark.parametrize("issue_trailer", [False, True])
     def test_missing_jira_is_only_allowed_during_rebase(
-        self, tmp_path: Path, monkeypatch, operation: str | None
+        self, tmp_path: Path, monkeypatch, operation: str | None, issue_trailer: bool
     ):
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -393,25 +427,33 @@ class TestPrepareCommitMsg:
         original_message = "An original commit message\n"
         message_file.write_text(original_message, encoding="utf-8")
 
-        prepare_commit_msg(str(message_file), "commit", "HEAD")
+        prepare_commit_msg(
+            str(message_file), "commit", "HEAD", issue_trailer=issue_trailer
+        )
 
         assert message_file.read_text(encoding="utf-8") == original_message
-        is_valid, error_message = check_commit_message(str(message_file))
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=issue_trailer
+        )
         if operation in ("rebase-merge", "rebase-apply"):
             assert is_valid
             assert error_message == ""
         else:
             assert not is_valid
-            assert error_message == (
-                "Either the branch name or the commit message must start with a JIRA ID."
-            )
+            assert error_message.startswith("Either the branch name")
 
     @pytest.mark.parametrize(
         "operation", ["rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", None]
     )
     @pytest.mark.parametrize("summary", ["123456789", "1234567890"])
+    @pytest.mark.parametrize("issue_trailer", [False, True])
     def test_minimum_message_length_is_not_enforced_during_replay(
-        self, tmp_path: Path, monkeypatch, operation: str | None, summary: str
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        operation: str | None,
+        summary: str,
+        issue_trailer: bool,
     ):
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -423,9 +465,16 @@ class TestPrepareCommitMsg:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("GIT_DIR", raising=False)
         message_file = tmp_path / "COMMIT_EDITMSG"
-        message_file.write_text(f"GA-5678 {summary}\n", encoding="utf-8")
+        message = (
+            f"{summary}\n\nIssue: GA-5678\n"
+            if issue_trailer
+            else f"GA-5678 {summary}\n"
+        )
+        message_file.write_text(message, encoding="utf-8")
 
-        is_valid, error_message = check_commit_message(str(message_file))
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=issue_trailer
+        )
 
         if operation or len(summary) >= 10:
             assert is_valid
@@ -435,3 +484,239 @@ class TestPrepareCommitMsg:
             assert error_message.startswith(
                 "First line of commit message must be at least"
             )
+
+
+class TestIssueTrailers:
+    @pytest.fixture(autouse=True)
+    def isolate_git_dir(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("GIT_DIR", raising=False)
+
+    @pytest.mark.parametrize(
+        "message, expected",
+        [
+            (
+                "A sufficiently long subject\n",
+                "A sufficiently long subject\n\nIssue: GA-5678\n",
+            ),
+            (
+                "fixup! A sufficiently long subject\n\nSome body text.\n",
+                "fixup! A sufficiently long subject\n\nSome body text.\n\nIssue: GA-5678\n",
+            ),
+            (
+                "A sufficiently long subject\n\nSigned-off-by: Example <test@example.invalid>\n",
+                "A sufficiently long subject\n\n"
+                "Signed-off-by: Example <test@example.invalid>\nIssue: GA-5678\n",
+            ),
+            (
+                "A sufficiently long subject\n\n# Template instructions\n",
+                "A sufficiently long subject\n\nIssue: GA-5678\n# Template instructions\n",
+            ),
+            (
+                "[GI-1234] A sufficiently long subject\n",
+                "[GI-1234] A sufficiently long subject\n\nIssue: GA-5678\n",
+            ),
+            (
+                "A sufficiently long subject",
+                "A sufficiently long subject\n\nIssue: GA-5678\n",
+            ),
+            (
+                "A sufficiently long subject\n\nIssue: GI-1234\n\nMore body text.\n",
+                "A sufficiently long subject\n\nIssue: GI-1234\n\n"
+                "More body text.\n\nIssue: GA-5678\n",
+            ),
+            (
+                "A sufficiently long subject\n\n"
+                "Signed-off-by: Example <test@example.invalid>\n"
+                " continuation\n\n# Template instructions\n",
+                "A sufficiently long subject\n\n"
+                "Signed-off-by: Example <test@example.invalid>\n"
+                " continuation\nIssue: GA-5678\n# Template instructions\n",
+            ),
+            (
+                "A sufficiently long subject\n\n---\nIssue: GI-1234\n",
+                "A sufficiently long subject\n\nIssue: GA-5678\n---\nIssue: GI-1234\n",
+            ),
+            (
+                "A sufficiently long subject\n\n"
+                "# ------------------------ >8 ------------------------\n"
+                "Issue: GI-1234\n",
+                "A sufficiently long subject\n\nIssue: GA-5678\n"
+                "# ------------------------ >8 ------------------------\n"
+                "Issue: GI-1234\n",
+            ),
+        ],
+    )
+    def test_prepare_adds_only_a_footer(
+        self, tmp_path: Path, mock_get_branch_name, message: str, expected: str
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text(message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), issue_trailer=True)
+        prepare_commit_msg(str(message_file), issue_trailer=True)
+
+        assert message_file.read_text(encoding="utf-8") == expected
+
+    @pytest.mark.parametrize("value", ["GI-1234", "", "not-an-issue"])
+    def test_prepare_preserves_existing_trailer(
+        self, tmp_path: Path, mock_get_branch_name, value: str
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        original_message = f"A sufficiently long subject\n\nIssue: {value}\n"
+        message_file.write_text(original_message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), issue_trailer=True)
+
+        assert message_file.read_text(encoding="utf-8") == original_message
+
+    @pytest.mark.parametrize(
+        "message, valid",
+        [
+            ("A sufficiently long subject\n\nIssue: GA-5678\n", True),
+            ("A sufficiently long subject\n\nissue: GA-5678\n", True),
+            ("A sufficiently long subject\n\nIssue: GA-5678\nIssue: GI-1234\n", True),
+            ("A sufficiently long subject\n\nIssue:\n GA-5678\n", True),
+            (
+                "A sufficiently long subject\n\n"
+                "Issue: GA-5678\nSigned-off-by: Example <test@example.invalid>\n",
+                True,
+            ),
+            ("[GA-5678] A sufficiently long subject\n", False),
+            ("A sufficiently long subject\n\nRefs: GA-5678\n", False),
+            ("A sufficiently long subject\n\n# Issue: GA-5678\n", False),
+            ("A sufficiently long subject\n\nIssue: GA-5678\n\nBody text.\n", False),
+            ("A sufficiently long subject\n\nIssue: not-an-issue\n", False),
+            ("A sufficiently long subject\n\nIssue:\n", False),
+            ("A sufficiently long subject\n\n---\nIssue: GA-5678\n", False),
+            (
+                "A sufficiently long subject\n\n"
+                "# ------------------------ >8 ------------------------\n"
+                "Issue: GA-5678\n",
+                False,
+            ),
+            ("A sufficiently long subject\nIssue: GA-5678\n", False),
+        ],
+    )
+    def test_check_uses_only_valid_issue_trailers(
+        self, tmp_path: Path, mock_get_branch_name, message: str, valid: bool
+    ):
+        mock_get_branch_name("feature_branch")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text(message, encoding="utf-8")
+
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=True
+        )
+
+        assert is_valid == valid
+        assert bool(error_message) != valid
+
+    @pytest.mark.parametrize("operation", [None, "rebase-merge", "CHERRY_PICK_HEAD"])
+    @pytest.mark.parametrize(
+        "trailers", ["Issue: GI-1234\n", "Issue: GA-5678\nIssue: GI-1234\n"]
+    )
+    def test_mismatch_and_short_subject_during_replay(
+        self, tmp_path: Path, mock_get_branch_name, operation: str | None, trailers: str
+    ):
+        mock_get_branch_name("GA-5678")
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        if operation == "CHERRY_PICK_HEAD":
+            (git_dir / operation).write_text("abc123\n", encoding="utf-8")
+        elif operation:
+            (git_dir / operation).mkdir()
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text(f"Short\n\n{trailers}", encoding="utf-8")
+
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=True
+        )
+
+        if operation:
+            assert is_valid
+            assert error_message == ""
+        else:
+            assert not is_valid
+            assert "Different JIRA ID in Issue trailer GI-1234" in error_message
+
+    @pytest.mark.parametrize("mode", ["--prepare", "--check"])
+    def test_cli_option(
+        self, tmp_path: Path, monkeypatch, mock_get_branch_name, mode: str
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message = "A sufficiently long subject\n"
+        if mode == "--check":
+            message += "\nIssue: GI-1234\n"
+        message_file.write_text(message, encoding="utf-8")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["git_message_hook", mode, "--issue-trailer", str(message_file)],
+        )
+
+        if mode == "--check":
+            with pytest.raises(SystemExit) as exc_info:
+                git_message_hook_main()
+            assert exc_info.value.code == 1
+        else:
+            git_message_hook_main()
+            assert message_file.read_text(encoding="utf-8") == (
+                "A sufficiently long subject\n\nIssue: GA-5678\n"
+            )
+
+    @pytest.mark.parametrize("message", ["", "# Template instructions\n"])
+    def test_prepared_trailer_does_not_count_as_a_summary(
+        self, tmp_path: Path, mock_get_branch_name, message: str
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text(message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), issue_trailer=True)
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=True
+        )
+
+        assert not is_valid
+        assert error_message.startswith("First line of commit message must be at least")
+
+    def test_default_mode_does_not_use_issue_trailers(
+        self, tmp_path: Path, mock_get_branch_name
+    ):
+        mock_get_branch_name("feature_branch")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text(
+            "A sufficiently long subject\n\nIssue: GA-5678\n", encoding="utf-8"
+        )
+
+        is_valid, error_message = check_commit_message(str(message_file))
+
+        assert not is_valid
+        assert error_message == (
+            "Either the branch name or the commit message must start with a JIRA ID."
+        )
+
+    def test_trailer_preparation_and_check_do_not_start_subprocesses(
+        self, tmp_path: Path, mock_get_branch_name
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text("A sufficiently long subject\n", encoding="utf-8")
+
+        with mock.patch(
+            "subprocess.Popen", side_effect=AssertionError("Unexpected subprocess")
+        ):
+            prepare_commit_msg(str(message_file), issue_trailer=True)
+            assert check_commit_message(str(message_file), issue_trailer=True) == (
+                True,
+                "",
+            )
+            prepare_commit_msg(str(message_file), issue_trailer=True)
+
+        assert message_file.read_text(encoding="utf-8") == (
+            "A sufficiently long subject\n\nIssue: GA-5678\n"
+        )

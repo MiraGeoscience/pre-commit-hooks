@@ -7,16 +7,14 @@
 
 -   id: prepare-commit-msg
     name: prepare commit message
-    description: add the JIRA ID found in the branch name in case it is missing from the commit message
-    entry: git_message_hook
-    args: [--prepare]
+    description: add the branch JIRA ID to the subject or, with --issue-trailer, an Issue trailer
+    entry: git_message_hook --prepare
     language: python
     stages: [prepare-commit-msg]
 
 -   id: check-commit-msg
     name: check commit message
-    description: check the commit message for a valid JIRA ID
-    entry: git_message_hook
-    args: [--check]
+    description: check for a valid JIRA ID in the subject or, with --issue-trailer, an Issue trailer
+    entry: git_message_hook --check
     language: python
     stages: [commit-msg]
