@@ -92,6 +92,15 @@ def _get_git_dir() -> pathlib.Path | None:
     return None
 
 
+def _is_rebase_in_progress() -> bool:
+    """Return whether Git has an active rebase state directory."""
+    git_dir = _get_git_dir()
+    return git_dir is not None and any(
+        (git_dir / rebase_dir).is_dir()
+        for rebase_dir in ("rebase-merge", "rebase-apply")
+    )
+
+
 def get_branch_name() -> str | None:
     """:return: the name of the current branch"""
     git_dir = _get_git_dir()
@@ -146,15 +155,25 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
                 break
     assert first_line is not None
 
-    if not branch_jira_id and not (
-        message_jira_id or (not prefix_bang and first_line.lower().startswith("merge"))
+    if (
+        not branch_jira_id
+        and not (
+            message_jira_id
+            or (not prefix_bang and first_line.lower().startswith("merge"))
+        )
+        and not _is_rebase_in_progress()
     ):
         return (
             False,
             "Either the branch name or the commit message must start with a JIRA ID.",
         )
 
-    if branch_jira_id and message_jira_id and branch_jira_id != message_jira_id:
+    if (
+        branch_jira_id
+        and message_jira_id
+        and branch_jira_id != message_jira_id
+        and not _is_rebase_in_progress()
+    ):
         return (
             False,
             f"Different JIRA ID in commit message {message_jira_id} "
@@ -199,7 +218,8 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
     """To be used as the Git prepare-commit-msg hook.
 
     Will add the JIRA ID found in the branch name in case it is missing from the commit
-    message.
+    message. During a rebase, this also handles messages sourced from another commit
+    and preserves any JIRA ID already in that message.
     """
 
     branch_jira_id = ""
@@ -210,7 +230,9 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
     if not branch_jira_id:
         return
 
-    if source not in [None, "message", "template"]:
+    if source not in [None, "message", "template"] and not (
+        source == "commit" and _is_rebase_in_progress()
+    ):
         return
 
     prefix_bang = ""

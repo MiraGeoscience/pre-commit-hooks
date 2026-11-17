@@ -21,6 +21,7 @@ from mirageoscience.hooks.git_message_hook import (
     get_branch_name,
     get_jira_id,
     get_message_prefix_bang,
+    prepare_commit_msg,
 )
 from mirageoscience.hooks.git_message_hook import (
     main as git_message_hook_main,
@@ -179,6 +180,15 @@ class TestGetGitDir:
         monkeypatch.chdir(worktree_root)
         assert _get_git_dir() == real_git_dir
 
+    def test_git_dir_environment_variable(self, tmp_path: Path, monkeypatch):
+        """Uses GIT_DIR when Git provides an alternate git directory."""
+        git_dir = tmp_path / "alternate_git_dir"
+        git_dir.mkdir()
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GIT_DIR", str(git_dir))
+        assert _get_git_dir() == git_dir
+
 
 class TestGetBranchName:
     def test_normal_repo_on_branch(self, tmp_path: Path, monkeypatch):
@@ -269,3 +279,95 @@ class TestGetBranchName:
         """Returns None when there is no .git entry."""
         monkeypatch.chdir(tmp_path)
         assert get_branch_name() is None
+
+
+class TestPrepareCommitMsg:
+    @staticmethod
+    def _set_up_rebase_git_dir(tmp_path: Path, monkeypatch) -> None:
+        git_dir = tmp_path / "alternate_git_dir"
+        rebase_dir = git_dir / "rebase-merge"
+        rebase_dir.mkdir(parents=True)
+        (git_dir / "HEAD").write_text("abc123\n", encoding="utf-8")
+        (rebase_dir / "head-name").write_text("refs/heads/GA-5678\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GIT_DIR", str(git_dir))
+
+    def test_rebase_commit_without_jira_gets_branch_jira(
+        self, tmp_path: Path, monkeypatch
+    ):
+        self._set_up_rebase_git_dir(tmp_path, monkeypatch)
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text("An original commit message\n", encoding="utf-8")
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["git_message_hook", "--prepare", str(message_file), "commit", "HEAD"],
+        )
+        git_message_hook_main()
+
+        assert message_file.read_text(encoding="utf-8") == (
+            "[GA-5678] An original commit message\n"
+        )
+
+    def test_rebase_commit_with_different_jira_is_preserved(
+        self, tmp_path: Path, monkeypatch
+    ):
+        self._set_up_rebase_git_dir(tmp_path, monkeypatch)
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        original_message = "[GI-1234] An original commit message\n"
+        message_file.write_text(original_message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), "commit")
+
+        assert message_file.read_text(encoding="utf-8") == original_message
+        assert check_commit_message(str(message_file)) == (True, "")
+
+    @pytest.mark.parametrize("source", ["message", "commit", "merge"])
+    @pytest.mark.parametrize("has_jira", [False, True])
+    def test_cherry_pick_message(
+        self, tmp_path: Path, monkeypatch, source: str, has_jira: bool
+    ):
+        git_dir = tmp_path / "alternate_git_dir"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/GA-5678\n", encoding="utf-8")
+        (git_dir / "CHERRY_PICK_HEAD").write_text("abc123\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GIT_DIR", str(git_dir))
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        original_message = (
+            "[GI-1234] An original commit message\n"
+            if has_jira
+            else "An original commit message\n"
+        )
+        message_file.write_text(original_message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), source)
+
+        expected_message = (
+            original_message if has_jira else f"[GA-5678] {original_message}"
+        )
+        assert message_file.read_text(encoding="utf-8") == expected_message
+        assert check_commit_message(str(message_file)) == (True, "")
+
+    @pytest.mark.parametrize("source", ["merge", "commit"])
+    def test_non_replay_message_is_unchanged(
+        self, tmp_path: Path, monkeypatch, mock_get_branch_name, source: str
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("GIT_DIR", raising=False)
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        original_message = "[GI-1234] An original commit message\n"
+        message_file.write_text(original_message, encoding="utf-8")
+        args = ["git_message_hook", "--prepare", str(message_file), source]
+        if source == "commit":
+            args.append("HEAD")
+        monkeypatch.setattr(sys, "argv", args)
+
+        git_message_hook_main()
+
+        assert message_file.read_text(encoding="utf-8") == original_message
+        is_valid, error_message = check_commit_message(str(message_file))
+        assert not is_valid
+        assert error_message.startswith("Different JIRA ID in commit message")

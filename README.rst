@@ -12,12 +12,14 @@ Included Hooks
 
 -  ``check-copyright``: Checks for valid copyright statements in files.
 -  ``prepare-commit-msg``: Adds the JIRA ID found in the branch name
-   in case it is missing from the commit message.
+   in case it is missing from the commit message, including during a rebase.
+   Existing JIRA IDs in rebased commit messages are preserved.
 -  ``check-commit-message``: Checks that the branch name or the commit
    message starts with a reference to JIRA, and if the message meets the
    minimum required length for the summary line. Also checks that the JIRA ID in
    the commit message is consistEnt with the one extracted from the
-   branch name (if any).
+   branch name (if any), except during a rebase where original commit messages
+   may have a different JIRA ID.
 
 Usage
 ^^^^^
