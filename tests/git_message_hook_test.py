@@ -371,3 +371,49 @@ class TestPrepareCommitMsg:
         is_valid, error_message = check_commit_message(str(message_file))
         assert not is_valid
         assert error_message.startswith("Different JIRA ID in commit message")
+
+    @pytest.mark.parametrize(
+        "operation", ["rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", None]
+    )
+    def test_missing_jira_is_only_allowed_during_rebase(
+        self, tmp_path: Path, monkeypatch, operation: str | None
+    ):
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text(
+            "ref: refs/heads/feature_branch\n", encoding="utf-8"
+        )
+        if operation == "CHERRY_PICK_HEAD":
+            (git_dir / operation).write_text("abc123\n", encoding="utf-8")
+        elif operation:
+            (git_dir / operation).mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("GIT_DIR", raising=False)
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        original_message = "An original commit message\n"
+        message_file.write_text(original_message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), "commit", "HEAD")
+
+        assert message_file.read_text(encoding="utf-8") == original_message
+        is_valid, error_message = check_commit_message(str(message_file))
+        if operation in ("rebase-merge", "rebase-apply"):
+            assert is_valid
+            assert error_message == ""
+        else:
+            assert not is_valid
+            assert error_message == (
+                "Either the branch name or the commit message must start with a JIRA ID."
+            )
+
+    def test_rebase_still_requires_minimum_message_length(
+        self, tmp_path: Path, monkeypatch
+    ):
+        self._set_up_rebase_git_dir(tmp_path, monkeypatch)
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text("[GI-1234] Short\n", encoding="utf-8")
+
+        is_valid, error_message = check_commit_message(str(message_file))
+
+        assert not is_valid
+        assert error_message.startswith("First line of commit message must be at least")

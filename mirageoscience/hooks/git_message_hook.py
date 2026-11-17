@@ -101,6 +101,14 @@ def _is_rebase_in_progress() -> bool:
     )
 
 
+def _is_replay_in_progress() -> bool:
+    """Return whether Git is rebasing or cherry-picking a commit."""
+    git_dir = _get_git_dir()
+    return _is_rebase_in_progress() or (
+        git_dir is not None and (git_dir / "CHERRY_PICK_HEAD").is_file()
+    )
+
+
 def get_branch_name() -> str | None:
     """:return: the name of the current branch"""
     git_dir = _get_git_dir()
@@ -172,7 +180,7 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
         branch_jira_id
         and message_jira_id
         and branch_jira_id != message_jira_id
-        and not _is_rebase_in_progress()
+        and not _is_replay_in_progress()
     ):
         return (
             False,
@@ -214,12 +222,15 @@ def check_commit_msg(filepath: str) -> None:
         sys.exit(1)
 
 
-def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
+def prepare_commit_msg(
+    filepath: str, source: str | None = None, _commit_id: str | None = None
+) -> None:
     """To be used as the Git prepare-commit-msg hook.
 
     Will add the JIRA ID found in the branch name in case it is missing from the commit
-    message. During a rebase, this also handles messages sourced from another commit
-    and preserves any JIRA ID already in that message.
+    message. During a rebase or cherry-pick, this also handles reused commit messages
+    and preserves any JIRA ID already in that message. Git may supply an unused
+    third argument identifying the original commit.
     """
 
     branch_jira_id = ""
@@ -231,7 +242,7 @@ def prepare_commit_msg(filepath: str, source: str | None = None) -> None:
         return
 
     if source not in [None, "message", "template"] and not (
-        source == "commit" and _is_rebase_in_progress()
+        source in ["commit", "merge"] and _is_replay_in_progress()
     ):
         return
 
