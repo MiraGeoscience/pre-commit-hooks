@@ -26,26 +26,36 @@ concurrency:
 jobs:
   call-workflow-static-analysis:
     name: Static analysis
-    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-static_analysis.yml@40e4f41b8195844608f93eb613ce4ce8a0a1b76e # v4.0.0
+    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-static_analysis.yml@edb72d7524d25db3b4eb976890eb6837a8eb39f8 # v4.0.1
     permissions:
       contents: read
       pull-requests: read
     with:
       package-manager: 'poetry'
       app-name: 'mirageoscience'
-      python-version: '3.10'
+      python-version: '3.14'
+  # Also verify the pre-commit hook via CI-tools; pre-commit.ci runs it separately.
+  call-workflow-pre-commit:
+    name: Pre-Commit
+    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-pre_commit.yml@edb72d7524d25db3b4eb976890eb6837a8eb39f8 # v4.0.1
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      app-name: 'mirageoscience'
+      python-version: '3.14'
   call-workflow-pytest:
     name: Pytest
-    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-pytest.yml@40e4f41b8195844608f93eb613ce4ce8a0a1b76e # v4.0.0
+    uses: MiraGeoscience/CI-tools/.github/workflows/reusable-python-pytest.yml@edb72d7524d25db3b4eb976890eb6837a8eb39f8 # v4.0.1
     permissions:
       contents: read
       pull-requests: read
     with:
       package-manager: 'poetry'
-      python-versions: '["3.10", "3.11", "3.12"]'
+      python-versions: '["3.12", "3.14"]'
       os: '["ubuntu-latest", "windows-latest"]'
       cache-number: 1
-      codecov-reference-python-version: '3.10'
+      codecov-reference-python-version: '3.14'
       codecov-reference-os: '["windows-latest"]'
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
