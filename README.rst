@@ -20,8 +20,8 @@ Included Hooks
    the commit message is consistEnt with the one extracted from the
    branch name (if any), except during a rebase or cherry-pick where original
    commit messages may have a different JIRA ID. During a rebase, a JIRA ID is
-   also optional when neither the branch nor the commit message supplies one;
-   the minimum summary length still applies.
+   also optional when neither the branch nor the commit message supplies one.
+   Minimum summary length is not enforced during rebases or cherry-picks.
 
 Usage
 ^^^^^

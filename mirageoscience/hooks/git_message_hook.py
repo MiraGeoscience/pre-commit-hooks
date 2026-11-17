@@ -139,7 +139,7 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
     and if the message meets the minimum required length for the summary line.
 
     The JIRA reference has to be at the beginning of the branch name, or of the commit
-    message.
+    message. Summary length is not checked during a rebase or cherry-pick.
     :return: a tuple telling whether the commit message is valid or not, and an error
         message (empty in case the message is valid).
     """
@@ -197,7 +197,10 @@ def check_commit_message(filepath: str) -> tuple[bool, str]:
             ].strip()
 
     min_required_length = 10
-    if len(stripped_message_line) < min_required_length:
+    if (
+        len(stripped_message_line) < min_required_length
+        and not _is_replay_in_progress()
+    ):
         return (
             False,
             f"First line of commit message must be at least {min_required_length} characters long, "
