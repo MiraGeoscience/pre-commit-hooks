@@ -87,6 +87,22 @@ can satisfy the JIRA requirement. Summary length is measured on the subject
 without counting trailer text. The existing rebase and cherry-pick exceptions
 apply in both modes.
 
+Autosquash commits
+^^^^^^^^^^^^^^^^^^
+
+The Git prefixes ``fixup!``, ``squash!``, and ``amend!`` identify autosquash
+targets, including when those prefixes are nested. The hooks preserve the exact
+target subject so that ``git rebase --autosquash`` can still match the original
+commit. In header mode, no JIRA ID is inserted into these subjects; the branch's
+JIRA ID can satisfy validation, and an existing ID after the bang prefixes is
+still parsed and checked for consistency. In trailer mode, validation continues
+to use the Issue trailer or branch, and a missing Issue trailer can still be
+added without changing the subject.
+
+Autosquash targets are exempt from the minimum summary length because they can
+reference short original subjects or commit hashes. JIRA presence and consistency
+checks still apply, subject to the existing rebase and cherry-pick exceptions.
+
 License
 ^^^^^^^
 

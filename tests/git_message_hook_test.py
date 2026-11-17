@@ -45,10 +45,13 @@ def test_get_jira_id():
     assert get_jira_id(text) == "GEOPY-1233"
 
 
-def test_get_message_prefix_bang_with_bang():
+@pytest.mark.parametrize(
+    "prefix", ["fixup! ", "squash! ", "amend! ", "fixup! fixup! ", "amend! squash! "]
+)
+def test_get_message_prefix_bang_with_bang(prefix: str):
     """Tests if get_message_prefix_bang can extract the prefix bang from a line."""
-    line = "fixup! This is a fix"
-    expected_prefix_bang = "fixup! "
+    line = f"{prefix}This is a fix"
+    expected_prefix_bang = prefix
     actual_prefix_bang = get_message_prefix_bang(line)
     assert actual_prefix_bang == expected_prefix_bang
 
@@ -720,3 +723,126 @@ class TestIssueTrailers:
         assert message_file.read_text(encoding="utf-8") == (
             "A sufficiently long subject\n\nIssue: GA-5678\n"
         )
+
+
+class TestBangPrefixes:
+    @pytest.fixture(autouse=True)
+    def isolate_git_dir(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("GIT_DIR", raising=False)
+
+    @pytest.mark.parametrize("issue_trailer", [False, True])
+    @pytest.mark.parametrize(
+        "prefix", ["fixup! ", "squash! ", "amend! ", "fixup! fixup! "]
+    )
+    def test_preparation_preserves_autosquash_target(
+        self, tmp_path: Path, mock_get_branch_name, prefix: str, issue_trailer: bool
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message = f"{prefix}Original target without a ticket\n"
+        message_file.write_text(message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file), issue_trailer=issue_trailer)
+
+        expected = f"{message}\nIssue: GA-5678\n" if issue_trailer else message
+        assert message_file.read_text(encoding="utf-8") == expected
+
+    @pytest.mark.parametrize("issue_trailer", [False, True])
+    @pytest.mark.parametrize(
+        "subject",
+        [
+            "fixup! 1234abcd",
+            "squash! Short",
+            "amend! Short",
+            "fixup! fixup! Short",
+        ],
+    )
+    def test_bang_targets_are_exempt_from_summary_length(
+        self, tmp_path: Path, mock_get_branch_name, subject: str, issue_trailer: bool
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message = f"{subject}\n"
+        if issue_trailer:
+            message += "\nIssue: GA-5678\n"
+        message_file.write_text(message, encoding="utf-8")
+
+        assert check_commit_message(str(message_file), issue_trailer=issue_trailer) == (
+            True,
+            "",
+        )
+
+    @pytest.mark.parametrize("issue_trailer", [False, True])
+    @pytest.mark.parametrize("branch", ["feature_branch", "GI-1234", "GA-5678"])
+    def test_bang_prefix_does_not_bypass_jira_validation(
+        self, tmp_path: Path, mock_get_branch_name, branch: str, issue_trailer: bool
+    ):
+        mock_get_branch_name(branch)
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message = (
+            "fixup! fixup! Short\n\nIssue: GI-1234\n"
+            if issue_trailer
+            else "fixup! fixup! [GI-1234] Short\n"
+        )
+        message_file.write_text(message, encoding="utf-8")
+
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=issue_trailer
+        )
+
+        if branch != "GA-5678":
+            assert is_valid
+            assert error_message == ""
+        else:
+            assert not is_valid
+            assert error_message.startswith("Different JIRA ID")
+
+    @pytest.mark.parametrize("issue_trailer", [False, True])
+    @pytest.mark.parametrize(
+        "subject", ["fixup! Merge another branch", "fixup! Original target"]
+    )
+    def test_bang_still_requires_jira(
+        self, tmp_path: Path, mock_get_branch_name, issue_trailer: bool, subject: str
+    ):
+        mock_get_branch_name("feature_branch")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message_file.write_text(f"{subject}\n", encoding="utf-8")
+
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=issue_trailer
+        )
+
+        assert not is_valid
+        assert error_message.startswith("Either the branch name")
+
+    @pytest.mark.parametrize("issue_trailer", [False, True])
+    @pytest.mark.parametrize("subject", ["custom! X", "fixup!X", "Short"])
+    def test_non_autosquash_subjects_still_require_minimum_length(
+        self, tmp_path: Path, mock_get_branch_name, subject: str, issue_trailer: bool
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message = f"{subject}\n"
+        if issue_trailer:
+            message += "\nIssue: GA-5678\n"
+        message_file.write_text(message, encoding="utf-8")
+
+        is_valid, error_message = check_commit_message(
+            str(message_file), issue_trailer=issue_trailer
+        )
+
+        assert not is_valid
+        assert error_message.startswith("First line of commit message must be at least")
+
+    def test_leading_blank_and_comments_do_not_hide_bang(
+        self, tmp_path: Path, mock_get_branch_name
+    ):
+        mock_get_branch_name("GA-5678")
+        message_file = tmp_path / "COMMIT_EDITMSG"
+        message = "# Template comment\n\nfixup! Original target without a ticket\n"
+        message_file.write_text(message, encoding="utf-8")
+
+        prepare_commit_msg(str(message_file))
+
+        assert message_file.read_text(encoding="utf-8") == message

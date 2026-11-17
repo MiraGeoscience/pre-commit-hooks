@@ -48,17 +48,16 @@ def get_jira_id(text) -> str:
 
 
 def get_message_prefix_bang(line: str) -> str:
-    """Capture the standard commit message prefix, if any, such as 'fixup!', 'amend!',
-    etc.
+    """Capture Git autosquash prefixes, including nested fixup!, squash!, and amend!.
 
     :return: the standard commit message prefix if found, else empty string.
     """
 
     class BangPattern:
-        """Internal class that encapsulates the regular expression for the Bnag pattern,
+        """Internal class that encapsulates the regular expression for the bang pattern,
         making sure it gets compiled only once."""
 
-        __pattern = re.compile(r"(\w*!\s)")
+        __pattern = re.compile(r"((?:(?:fixup|squash|amend)! )+)")
 
         @staticmethod
         def get():
@@ -211,7 +210,7 @@ def check_commit_message(
 
     The JIRA reference has to be at the beginning of the branch name, or of the commit
     message, or in an Issue trailer when issue_trailer is enabled. Summary length
-    is not checked during a rebase or cherry-pick.
+    is not checked for autosquash targets or during a rebase or cherry-pick.
     :return: a tuple telling whether the commit message is valid or not, and an error
         message (empty in case the message is valid).
     """
@@ -287,6 +286,7 @@ def check_commit_message(
     min_required_length = 10
     if (
         len(stripped_message_line) < min_required_length
+        and not prefix_bang
         and not _is_replay_in_progress()
     ):
         return (
@@ -330,6 +330,7 @@ def prepare_commit_msg(
     third argument identifying the original commit.
 
     With issue_trailer enabled, use an Issue trailer instead of the subject line.
+    Autosquash target subjects are never modified.
     """
 
     branch_jira_id = ""
@@ -349,27 +350,25 @@ def prepare_commit_msg(
         _prepare_issue_trailer(filepath, branch_jira_id)
         return
 
-    prefix_bang = ""
     with open(filepath, "r+", encoding="utf-8") as message_file:
         message_has_jira_id = False
         message_lines = message_file.readlines()
         for line_index, line_content in enumerate(message_lines):
-            if not line_content.startswith("#"):
-                # test only the first non-comment line
+            if not line_content.startswith("#") and line_content.strip():
                 line_content = line_content.strip()
-                prefix_bang = get_message_prefix_bang(line_content)
-                line_content = line_content[len(prefix_bang) :].strip()
+                if get_message_prefix_bang(line_content):
+                    # Preserve the exact autosquash target; inserting an ID would break matching.
+                    # Validation still checks the existing subject ID or the branch ID.
+                    return
                 message_jira_id = get_jira_id(line_content)
                 if not message_jira_id:
-                    message_lines[line_index] = (
-                        f"{prefix_bang}[{branch_jira_id}] {line_content}\n"
-                    )
+                    message_lines[line_index] = f"[{branch_jira_id}] {line_content}\n"
                 message_has_jira_id = True
                 break
 
         if not message_has_jira_id:
             # message is empty or all lines are comments: insert JIRA ID at the very beginning
-            message_lines.insert(0, f"{prefix_bang}[{branch_jira_id}]\n")
+            message_lines.insert(0, f"[{branch_jira_id}]\n")
 
         message_file.seek(0, 0)
         message_file.write("".join(message_lines))
