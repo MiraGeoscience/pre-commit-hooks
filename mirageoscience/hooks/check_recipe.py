@@ -12,10 +12,10 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+import tomlkit
 import yaml
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
@@ -279,11 +279,11 @@ def main() -> int:
     args = parser.parse_args()
 
     with args.pixi_file.open("rb") as file:
-        pixi = tomllib.load(file)
+        pixi = tomlkit.load(file).unwrap()
     with args.recipe_file.open(encoding="utf-8") as file:
         recipe = yaml.safe_load(file)
     with args.project_file.open("rb") as file:
-        project = tomllib.load(file)
+        project = tomlkit.load(file).unwrap()
     errors = validate_recipe(
         pixi,
         recipe,

@@ -9,7 +9,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 name = "mirageoscience.pre-commit-hooks"
 requires-python = ">=3.12,<4.0"
 dynamic = ["version"]
-dependencies = ["packaging>=25", "PyYAML>=6"]
+dependencies = ["packaging>=25", "PyYAML>=6", "tomlkit>=0.15.2"]
 
 description = ""
 readme = "README.rst"
@@ -32,7 +32,6 @@ dev = [
     "pytest",
     "pytest-mock",
     "pytest-cov",
-    "tomli",
 ]
 
 [tool.poetry]

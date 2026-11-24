@@ -9,10 +9,20 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
-from mirageoscience.hooks.check_pixi_lock import LockOptions, validate_lock
-from mirageoscience.hooks.check_recipe import RecipeOptions, validate_recipe
+from mirageoscience.hooks.check_pixi_lock import (
+    LockOptions,
+    main as check_pixi_lock_main,
+    validate_lock,
+)
+from mirageoscience.hooks.check_recipe import (
+    RecipeOptions,
+    main as check_recipe_main,
+    validate_recipe,
+)
 
 
 def _lock_fixture(
@@ -38,6 +48,79 @@ def _lock_fixture(
         "environments": {"default": {"packages": {"win-64": entries}}},
     }
     return pixi, lock
+
+
+def _multiline_pixi_manifest() -> str:
+    return """\
+[workspace.conda-pypi-map]
+"https://example.org/conda" = {
+    mapping-mode = "overlay",
+    mapping = {
+        gempy = "gempy",
+        gempy-engine = "gempy-engine",
+    },
+}
+
+[constraints]
+filelock = ">=4.2.1"
+
+[feature.mira-pypi]
+pypi-dependencies = {}
+"""
+
+
+def test_recipe_main_parses_toml_11_inline_tables(tmp_path, monkeypatch, capsys):
+    pixi_file = tmp_path / "pixi.toml"
+    recipe_file = tmp_path / "recipe.yaml"
+    project_file = tmp_path / "pyproject.toml"
+    pixi_file.write_text(_multiline_pixi_manifest(), encoding="utf-8")
+    recipe_file.write_text(
+        "requirements:\n  run_constraints:\n    - filelock >=4.2.1\n",
+        encoding="utf-8",
+    )
+    project_file.write_text("[project]\ndependencies = []\n", encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check-recipe",
+            "--pixi-file",
+            str(pixi_file),
+            "--recipe-file",
+            str(recipe_file),
+            "--project-file",
+            str(project_file),
+        ],
+    )
+
+    assert check_recipe_main() == 0
+    assert "Recipe constraints match" in capsys.readouterr().out
+
+
+def test_pixi_lock_main_parses_toml_11_inline_tables(tmp_path, monkeypatch, capsys):
+    pixi_file = tmp_path / "pixi.toml"
+    lock_file = tmp_path / "pixi.lock"
+    pixi_file.write_text(_multiline_pixi_manifest(), encoding="utf-8")
+    lock_file.write_text(
+        "packages: []\nenvironments:\n  default:\n    packages:\n      win-64: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check-pixi-lock",
+            "--pixi-file",
+            str(pixi_file),
+            "--lock-file",
+            str(lock_file),
+            "--pypi-feature",
+            "mira-pypi",
+        ],
+    )
+
+    assert check_pixi_lock_main() == 0
+    assert "Pixi lock package sources match" in capsys.readouterr().out
 
 
 def test_pypi_packages_are_forbidden_without_feature():

@@ -12,11 +12,11 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+import tomlkit
 import yaml
 from packaging.utils import canonicalize_name
 
@@ -369,7 +369,7 @@ def main() -> int:
     args = parser.parse_args()
 
     with args.pixi_file.open("rb") as file:
-        pixi = tomllib.load(file)
+        pixi = tomlkit.load(file).unwrap()
     with args.lock_file.open(encoding="utf-8") as file:
         lock = yaml.safe_load(file)
     errors = validate_lock(
