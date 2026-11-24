@@ -290,6 +290,43 @@ def test_pypi_source_validation_accepts_public_pypi_artifact_host(configured):
     )
 
 
+def test_pypi_source_validation_inherits_workspace_index_options():
+    pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
+    index = "https://packages.example.org/simple"
+    url = "https://packages.example.org/packages/mira-package.whl"
+    pixi["pypi-options"] = {"index-url": index}
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["indexes"] = [index]
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    options = LockOptions("mira-pypi", validate_pypi_sources=True)
+
+    assert not validate_lock(pixi, lock, options)
+    url = "https://files.pythonhosted.org/packages/mira-package.whl"
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    assert any(
+        "unexpected PyPI source" in error
+        for error in validate_lock(pixi, lock, options)
+    )
+
+
+def test_pypi_source_validation_ignores_inactive_index_feature():
+    pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
+    pixi["feature"]["mira-pypi-index"] = {
+        "pypi-options": {"index-url": "https://packages.example.org/simple"}
+    }
+    url = "https://files.pythonhosted.org/packages/mira-package.whl"
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    options = LockOptions(
+        "mira-pypi",
+        pypi_index_feature="mira-pypi-index",
+        validate_pypi_sources=True,
+    )
+
+    assert not validate_lock(pixi, lock, options)
+
+
 def test_pypi_source_validation_accepts_configured_artifact_root():
     pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
     pixi["feature"]["mira-pypi"]["pypi-options"] = {
@@ -325,6 +362,32 @@ def test_implicit_default_environment_and_unknown_named_environment(environments
         "unknown: missing" in error
         for error in validate_lock(pixi, lock, LockOptions("mira-pypi"))
     )
+
+
+def test_pixi_lock_main_reports_validation_errors(tmp_path, monkeypatch, capsys):
+    pixi_file = tmp_path / "pixi.toml"
+    lock_file = tmp_path / "pixi.lock"
+    pixi_file.write_text(_multiline_pixi_manifest(), encoding="utf-8")
+    lock_file.write_text(
+        "packages: []\nenvironments:\n  default:\n    packages:\n      win-64: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check-pixi-lock",
+            "--pixi-file",
+            str(pixi_file),
+            "--lock-file",
+            str(lock_file),
+            "--pypi-feature",
+            "missing-feature",
+        ],
+    )
+
+    assert check_pixi_lock_main() == 1
+    assert "Pixi feature 'missing-feature' is not defined" in capsys.readouterr().err
 
 
 def test_recipe_checks_constraints_and_optional_pytorch():
@@ -419,6 +482,31 @@ def test_recipe_infers_feature_constraint_source_and_floor():
     pixi["feature"]["conda-rt"]["dependencies"]["pillow"] = "12.*"
     errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
     assert any("pillow" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("recipe_constraint", "pixi_constraint"),
+    [("urllib3>=2.5", ">=2.5"), ("urllib3=2.5", "=2.5")],
+)
+def test_recipe_parses_conda_constraints_without_spaces(
+    recipe_constraint, pixi_constraint
+):
+    pixi = {"constraints": {"urllib3": pixi_constraint}}
+    recipe = {"requirements": {"run_constraints": [recipe_constraint]}}
+
+    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
+
+
+def test_recipe_reads_conditional_run_constraints():
+    pixi = {"constraints": {"filelock": ">=4.2.1"}}
+    recipe = {
+        "requirements": {
+            "run": ["python >=3.12"],
+            "run_constraints": [{"if": "win", "then": "filelock >=4.2.1"}],
+        }
+    }
+
+    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
 
 
 def test_recipe_accepts_inline_versions_but_rejects_versionless_dependencies():

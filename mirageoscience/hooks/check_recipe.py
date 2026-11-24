@@ -30,10 +30,11 @@ class RecipeOptions:
 
 
 def _parse_constraint(value: str) -> tuple[str, str]:
-    name, separator, specifier = value.strip().partition(" ")
-    if not separator or not specifier.strip():
+    match = re.match(r"^\s*([^\s<>=!~]+)\s*(.*?)\s*$", value)
+    if not match or not match.group(2):
         raise ValueError(f"Invalid recipe run constraint: {value!r}")
-    return canonicalize_name(name), specifier.strip()
+    name = match.group(1).rsplit("::", 1)[-1]
+    return canonicalize_name(name), match.group(2)
 
 
 def _as_specifier_set(value: str) -> SpecifierSet:
@@ -42,10 +43,39 @@ def _as_specifier_set(value: str) -> SpecifierSet:
     specifiers = []
     for specifier in value.split(","):
         specifier = specifier.strip()
+        conda_equality = re.fullmatch(r"=(\d[0-9A-Za-z.!+_-]*)", specifier)
+        if conda_equality:
+            version = conda_equality.group(1)
+            specifier = f"=={version if version.endswith('.*') else f'{version}.*'}"
         if not any(operator in specifier for operator in "<>=!~"):
             specifier = f"=={specifier}"
         specifiers.append(specifier)
     return SpecifierSet(",".join(specifiers))
+
+
+def _requirement_strings(values: object):
+    if values is None:
+        return
+    if isinstance(values, str):
+        yield values
+        return
+    if isinstance(values, list):
+        for value in values:
+            yield from _requirement_strings(value)
+        return
+    if isinstance(values, dict) and "then" in values:
+        yield from _requirement_strings(values["then"])
+        if "else" in values:
+            yield from _requirement_strings(values["else"])
+        return
+    raise ValueError(f"Invalid recipe requirement entry: {values!r}")
+
+
+def _requirement_package(value: str) -> str:
+    match = re.match(r"^(?:[^\s:]+::)?([a-zA-Z0-9_.-]+)", value.strip())
+    if not match:
+        raise ValueError(f"Invalid recipe run requirement: {value!r}")
+    return canonicalize_name(match.group(1))
 
 
 def _project_dependency_names(project: dict) -> set[str]:
@@ -175,8 +205,8 @@ def _published_transitivity_errors(
 ) -> list[str]:
     dependencies = _project_dependency_names(project)
     dependencies.update(
-        canonicalize_name(value.split(maxsplit=1)[0].rsplit("::", 1)[-1])
-        for value in recipe["requirements"].get("run", [])
+        _requirement_package(value)
+        for value in _requirement_strings(recipe["requirements"].get("run", []))
     )
     dependencies = {aliases.get(package, package) for package in dependencies}
     direct_dependencies = security_packages & dependencies
@@ -233,7 +263,7 @@ def _transitivity_errors(
 def _pytorch_errors(recipe: dict) -> list[str]:
     backend_specs = []
     for section in ("run", "run_constraints"):
-        for value in recipe["requirements"].get(section, []):
+        for value in _requirement_strings(recipe["requirements"].get(section, [])):
             match = re.match(r"^(?:[^\s:]+::)?([a-zA-Z0-9_.-]+)(.*)$", value.strip())
             if not match:
                 continue
@@ -257,7 +287,9 @@ def validate_recipe(
 ) -> list[str]:
     recipe_constraints = dict(
         _parse_constraint(value)
-        for value in recipe["requirements"].get("run_constraints", [])
+        for value in _requirement_strings(
+            recipe["requirements"].get("run_constraints", [])
+        )
     )
     pixi_sources = _pixi_constraint_sources(pixi, set(recipe_constraints))
     errors = _constraint_errors(recipe_constraints, pixi_sources)

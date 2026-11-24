@@ -119,8 +119,18 @@ def _locked_names(
     return names
 
 
-def _index_urls(pixi: dict, feature_name: str) -> set[str]:
-    options = pixi["feature"][feature_name].get("pypi-options", {})
+def _pypi_options(pixi: dict, feature_name: str | None) -> dict:
+    options = dict(pixi.get("pypi-options", {}))
+    options.update(pixi.get("workspace", {}).get("pypi-options", {}))
+    if feature_name is not None:
+        options.update(
+            pixi.get("feature", {}).get(feature_name, {}).get("pypi-options", {})
+        )
+    return options
+
+
+def _index_urls(pixi: dict, feature_name: str | None) -> set[str]:
+    options = _pypi_options(pixi, feature_name)
     urls = set()
     if url := options.get("index-url"):
         urls.add(url.rstrip("/"))
@@ -128,7 +138,9 @@ def _index_urls(pixi: dict, feature_name: str) -> set[str]:
     return urls
 
 
-def _expectations(pixi: dict, options: LockOptions, platform: str) -> LockExpectations:
+def _expectations(
+    pixi: dict, options: LockOptions, platform: str, features: set[str]
+) -> LockExpectations:
     pypi_packages = _feature_dependencies(
         pixi, options.pypi_feature, "pypi-dependencies", platform
     )
@@ -137,14 +149,15 @@ def _expectations(pixi: dict, options: LockOptions, platform: str) -> LockExpect
         if options.conda_feature
         else set()
     )
-    index_feature = options.pypi_index_feature or options.pypi_feature
+    index_feature: str | None = options.pypi_index_feature or options.pypi_feature
+    if index_feature not in features:
+        index_feature = None
     index_urls = (
         _index_urls(pixi, index_feature) if options.validate_pypi_sources else set()
     )
     source_indexes = set(index_urls)
-    if options.validate_pypi_sources and not pixi["feature"][index_feature].get(
-        "pypi-options", {}
-    ).get("index-url"):
+    index_options = _pypi_options(pixi, index_feature)
+    if options.validate_pypi_sources and not index_options.get("index-url"):
         source_indexes.add(PYPI_INDEX)
     source_roots = {
         f"{url.removesuffix('/simple').rstrip('/')}/" for url in source_indexes
@@ -321,7 +334,7 @@ def _validate_environment(
     for platform, entries in environment_lock["packages"].items():
         label = f"{environment_name}/{platform}"
         platform_context = LockContext(
-            options, _expectations(pixi, options, platform), packages_by_url
+            options, _expectations(pixi, options, platform, features), packages_by_url
         )
         errors.extend(
             _validate_platform(
@@ -368,27 +381,37 @@ def main() -> int:
     parser.add_argument("--artifact-source-root", action="append", default=[])
     args = parser.parse_args()
 
-    with args.pixi_file.open("rb") as file:
-        pixi = tomlkit.load(file).unwrap()
-    with args.lock_file.open(encoding="utf-8") as file:
-        lock = yaml.safe_load(file)
-    errors = validate_lock(
-        pixi,
-        lock,
-        LockOptions(
-            pypi_feature=args.pypi_feature,
-            conda_feature=args.conda_feature,
-            strict_pypi=args.strict_pypi,
-            pypi_index_feature=args.pypi_index_feature,
-            validate_pypi_sources=args.validate_pypi_sources,
-            artifact_source_roots=tuple(args.artifact_source_root),
-            git_url_prefixes=(
-                tuple(args.git_url_prefix)
-                if args.git_url_prefix is not None
-                else DEFAULT_GIT_URL_PREFIXES
+    try:
+        with args.pixi_file.open("rb") as file:
+            pixi = tomlkit.load(file).unwrap()
+        with args.lock_file.open(encoding="utf-8") as file:
+            lock = yaml.safe_load(file)
+        errors = validate_lock(
+            pixi,
+            lock,
+            LockOptions(
+                pypi_feature=args.pypi_feature,
+                conda_feature=args.conda_feature,
+                strict_pypi=args.strict_pypi,
+                pypi_index_feature=args.pypi_index_feature,
+                validate_pypi_sources=args.validate_pypi_sources,
+                artifact_source_roots=tuple(args.artifact_source_root),
+                git_url_prefixes=(
+                    tuple(args.git_url_prefix)
+                    if args.git_url_prefix is not None
+                    else DEFAULT_GIT_URL_PREFIXES
+                ),
             ),
-        ),
-    )
+        )
+    except (
+        ValueError,
+        KeyError,
+        TypeError,
+        tomlkit.exceptions.ParseError,
+        yaml.YAMLError,
+    ) as error:
+        print(f"Invalid Pixi lock configuration: {error}", file=sys.stderr)
+        return 1
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
