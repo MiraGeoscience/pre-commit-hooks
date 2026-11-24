@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mirageoscience.hooks.check_pixi_lock import LockOptions, validate_lock
 from mirageoscience.hooks.check_recipe import RecipeOptions, validate_recipe
 
@@ -101,6 +103,98 @@ def test_pypi_source_validation_defaults_to_mira_git_urls():
     assert not errors
 
 
+def test_target_specific_feature_dependencies_are_checked_per_platform():
+    pixi, lock = _lock_fixture(features=["mira-pypi", "conda-rt"])
+    pixi["feature"]["mira-pypi"] = {
+        "target": {
+            "win-64": {"pypi-dependencies": {"win-package": "*"}},
+            "linux": {"pypi-dependencies": {"linux-package": "*"}},
+        }
+    }
+    pixi["feature"]["conda-rt"] = {
+        "dependencies": {"base-package": "*"},
+        "target": {"win-64": {"dependencies": {"win-conda": "*"}}},
+    }
+    win_url = "https://example.org/win.whl"
+    linux_url = "https://example.org/linux.whl"
+    lock["packages"] = [
+        {"pypi": win_url, "name": "win-package"},
+        {"pypi": linux_url, "name": "linux-package"},
+    ]
+    base = {"conda": "https://example.org/base-package-1-0.conda"}
+    win = {"conda": "https://example.org/win-conda-1-0.conda"}
+    lock["environments"]["default"]["packages"] = {
+        "win-64": [{"pypi": win_url}, base, win],
+        "linux-64": [{"pypi": linux_url}, base],
+    }
+    options = LockOptions("mira-pypi", conda_feature="conda-rt", strict_pypi=True)
+
+    assert not validate_lock(pixi, lock, options)
+    lock["environments"]["default"]["packages"]["win-64"].remove(win)
+    assert any("win-conda" in error for error in validate_lock(pixi, lock, options))
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_pypi_source_validation_accepts_public_pypi_artifact_host(configured):
+    pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
+    if configured:
+        pixi["feature"]["mira-pypi"]["pypi-options"] = {
+            "index-url": "https://pypi.org/simple"
+        }
+    url = "https://files.pythonhosted.org/packages/mira-package.whl"
+    lock["packages"][0]["pypi"] = url
+    if configured:
+        lock["environments"]["default"]["indexes"] = ["https://pypi.org/simple"]
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    options = LockOptions("mira-pypi", validate_pypi_sources=True)
+
+    assert not validate_lock(pixi, lock, options)
+    url = "https://files.pythonhosted.org.evil.example/package.whl"
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    assert any(
+        "unexpected PyPI source" in error
+        for error in validate_lock(pixi, lock, options)
+    )
+
+
+def test_pypi_source_validation_accepts_configured_artifact_root():
+    pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
+    pixi["feature"]["mira-pypi"]["pypi-options"] = {
+        "index-url": "https://index.example/simple"
+    }
+    url = "https://artifacts.example/packages/mira-package.whl"
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["indexes"] = ["https://index.example/simple"]
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    options = LockOptions("mira-pypi", validate_pypi_sources=True)
+    assert any(
+        "unexpected PyPI source" in error
+        for error in validate_lock(pixi, lock, options)
+    )
+    options = LockOptions(
+        "mira-pypi",
+        validate_pypi_sources=True,
+        artifact_source_roots=("https://artifacts.example/packages",),
+    )
+    assert not validate_lock(pixi, lock, options)
+
+
+@pytest.mark.parametrize("environments", [None, {"other": []}])
+def test_implicit_default_environment_and_unknown_named_environment(environments):
+    pixi, lock = _lock_fixture(features=[])
+    if environments is None:
+        del pixi["environments"]
+    else:
+        pixi["environments"] = environments
+    assert not validate_lock(pixi, lock, LockOptions("mira-pypi"))
+    lock["environments"]["unknown"] = lock["environments"]["default"]
+    assert any(
+        "unknown: missing" in error
+        for error in validate_lock(pixi, lock, LockOptions("mira-pypi"))
+    )
+
+
 def test_recipe_checks_constraints_and_optional_pytorch():
     pixi = {
         "constraints": {"filelock": ">=4.2.1"},
@@ -152,3 +246,51 @@ def test_recipe_infers_feature_constraint_source_and_floor():
     pixi["feature"]["conda-rt"]["dependencies"]["pillow"] = "12.*"
     errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
     assert any("pillow" in error for error in errors)
+
+
+def test_recipe_accepts_inline_versions_but_rejects_versionless_dependencies():
+    pixi = {
+        "feature": {
+            "conda-rt": {
+                "dependencies": {
+                    "pillow": {"version": "13.*", "channel": "conda-forge"}
+                }
+            }
+        }
+    }
+    recipe = {"requirements": {"run_constraints": ["pillow >=13.0.0"]}}
+    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
+    pixi["feature"]["conda-rt"]["dependencies"]["pillow"] = {"path": "../pillow"}
+    assert any(
+        "pillow" in error
+        for error in validate_recipe(pixi, recipe, {}, RecipeOptions())
+    )
+
+
+@pytest.mark.parametrize("section", ["root", "feature"])
+def test_recipe_rejects_target_specific_direct_security_dependencies(section):
+    pixi: dict = {"constraints": {"filelock": ">=4.2.1"}}
+    target = {"win-64": {"dependencies": {"filelock": "*"}}}
+    if section == "root":
+        pixi["target"] = target
+    else:
+        pixi["feature"] = {"extra": {"target": target}}
+    recipe = {"requirements": {"run_constraints": ["filelock >=4.2.1"]}}
+    assert any(
+        "not direct dependencies" in error
+        for error in validate_recipe(pixi, recipe, {}, RecipeOptions())
+    )
+
+
+def test_recipe_applies_aliases_to_feature_dependencies():
+    pixi = {
+        "constraints": {"pytorch": ">=2.0"},
+        "feature": {"extra": {"pypi-dependencies": {"torch": "*"}}},
+    }
+    recipe = {"requirements": {"run_constraints": ["pytorch >=2.0"]}}
+    assert any(
+        "not direct dependencies" in error
+        for error in validate_recipe(
+            pixi, recipe, {}, RecipeOptions(package_aliases=("torch=pytorch",))
+        )
+    )

@@ -10,7 +10,6 @@
     description: check locked Conda and PyPI sources against Pixi workspace features
     entry: check_pixi_lock
     language: python
-    additional_dependencies: [packaging>=25, PyYAML>=6]
     pass_filenames: false
     files: ^(pixi\.toml|pixi\.lock|\.pre-commit-config\.yaml|prek\.toml)$
 
@@ -19,7 +18,6 @@
     description: check recipe security constraints and optional PyTorch backend policy
     entry: check_recipe
     language: python
-    additional_dependencies: [packaging>=25, PyYAML>=6]
     pass_filenames: false
     files: ^(recipe\.yaml|pixi\.toml|pyproject\.toml|\.pre-commit-config\.yaml|prek\.toml)$
 

@@ -9,6 +9,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 name = "mirageoscience.pre-commit-hooks"
 requires-python = ">=3.12,<4.0"
 dynamic = ["version"]
+dependencies = ["packaging>=25", "PyYAML>=6"]
 
 description = ""
 readme = "README.rst"
@@ -27,12 +28,10 @@ check_recipe = "mirageoscience.hooks.check_recipe:main"
 [dependency-groups]
 dev = [
     "Pygments",
-    "packaging",
     "pylint",
     "pytest",
     "pytest-mock",
     "pytest-cov",
-    "PyYAML",
     "tomli",
 ]
 

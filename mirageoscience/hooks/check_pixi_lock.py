@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from packaging.utils import canonicalize_name
 
 
 DEFAULT_GIT_URL_PREFIXES = ("git+https://github.com/MiraGeoscience/",)
+PYPI_INDEX = "https://pypi.org/simple"
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class LockOptions:
     pypi_index_feature: str | None = None
     validate_pypi_sources: bool = False
     git_url_prefixes: tuple[str, ...] = DEFAULT_GIT_URL_PREFIXES
+    artifact_source_roots: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,14 +52,34 @@ class LockContext:
 
 
 def _feature_dependencies(
-    pixi: dict, feature_name: str, dependency_type: str
+    pixi: dict, feature_name: str, dependency_type: str, platform: str
 ) -> set[str]:
     try:
-        dependencies = pixi["feature"][feature_name][dependency_type]
+        feature = pixi["feature"][feature_name]
     except KeyError as error:
+        raise ValueError(f"Pixi feature {feature_name!r} is not defined") from error
+    targets = feature.get("target", {})
+    if dependency_type not in feature and not any(
+        dependency_type in target for target in targets.values()
+    ):
         raise ValueError(
             f"Pixi feature {feature_name!r} has no {dependency_type!r} table"
-        ) from error
+        )
+    dependencies = dict(feature.get(dependency_type, {}))
+    subdir = platform
+    for candidate in pixi.get("workspace", {}).get("platforms", []):
+        if isinstance(candidate, dict) and candidate.get("name") == platform:
+            subdir = candidate.get("platform", platform)
+            break
+    family = subdir.split("-", 1)[0]
+    for selector, target in targets.items():
+        pattern = re.escape(selector).replace(r"\*", ".*")
+        if (
+            re.fullmatch(pattern, platform)
+            or selector == family
+            or (selector == "unix" and family in {"linux", "osx"})
+        ):
+            dependencies.update(target.get(dependency_type, {}))
     return {canonicalize_name(name) for name in dependencies}
 
 
@@ -99,19 +122,18 @@ def _locked_names(
 def _index_urls(pixi: dict, feature_name: str) -> set[str]:
     options = pixi["feature"][feature_name].get("pypi-options", {})
     urls = set()
-    for key in ("index-url",):
-        if url := options.get(key):
-            urls.add(url.rstrip("/"))
+    if url := options.get("index-url"):
+        urls.add(url.rstrip("/"))
     urls.update(url.rstrip("/") for url in options.get("extra-index-urls", []))
     return urls
 
 
-def _expectations(pixi: dict, options: LockOptions) -> LockExpectations:
+def _expectations(pixi: dict, options: LockOptions, platform: str) -> LockExpectations:
     pypi_packages = _feature_dependencies(
-        pixi, options.pypi_feature, "pypi-dependencies"
+        pixi, options.pypi_feature, "pypi-dependencies", platform
     )
     conda_packages = (
-        _feature_dependencies(pixi, options.conda_feature, "dependencies")
+        _feature_dependencies(pixi, options.conda_feature, "dependencies", platform)
         if options.conda_feature
         else set()
     )
@@ -119,7 +141,19 @@ def _expectations(pixi: dict, options: LockOptions) -> LockExpectations:
     index_urls = (
         _index_urls(pixi, index_feature) if options.validate_pypi_sources else set()
     )
-    source_roots = {f"{url.removesuffix('/simple').rstrip('/')}/" for url in index_urls}
+    source_indexes = set(index_urls)
+    if options.validate_pypi_sources and not pixi["feature"][index_feature].get(
+        "pypi-options", {}
+    ).get("index-url"):
+        source_indexes.add(PYPI_INDEX)
+    source_roots = {
+        f"{url.removesuffix('/simple').rstrip('/')}/" for url in source_indexes
+    }
+    if PYPI_INDEX in source_indexes:
+        source_roots.add("https://files.pythonhosted.org/")
+    source_roots.update(
+        f"{root.rstrip('/')}/" for root in options.artifact_source_roots
+    )
     return LockExpectations(pypi_packages, conda_packages, index_urls, source_roots)
 
 
@@ -127,12 +161,12 @@ def _source_errors(
     label: str,
     entries: list[dict],
     environment_lock: dict,
-    expected_pypi: set[str],
+    pypi_feature_enabled: bool,
     context: LockContext,
 ) -> list[str]:
     options = context.options
     expectations = context.expectations
-    if not options.validate_pypi_sources or not expected_pypi:
+    if not options.validate_pypi_sources or not pypi_feature_enabled:
         return []
 
     errors = []
@@ -183,7 +217,9 @@ def _pypi_errors(
                 f"{options.pypi_feature!r} feature: {sorted(pypi_names)}"
             )
     errors.extend(
-        _source_errors(label, entries, environment_lock, expected_pypi, context)
+        _source_errors(
+            label, entries, environment_lock, options.pypi_feature in features, context
+        )
     )
     return errors
 
@@ -243,22 +279,28 @@ def _validate_environment(
     pixi: dict,
     environment_name: str,
     environment_lock: dict,
-    context: LockContext,
+    options: LockOptions,
+    packages_by_url: dict[str, str],
 ) -> list[str]:
-    environment_config = pixi["environments"].get(environment_name)
+    environment_config = pixi.get("environments", {}).get(environment_name)
     if environment_config is None:
-        return [f"{environment_name}: missing Pixi environment definition"]
+        if environment_name != "default":
+            return [f"{environment_name}: missing Pixi environment definition"]
+        environment_config = []
     features = _environment_features(environment_config)
     errors = []
     for platform, entries in environment_lock["packages"].items():
         label = f"{environment_name}/{platform}"
+        platform_context = LockContext(
+            options, _expectations(pixi, options, platform), packages_by_url
+        )
         errors.extend(
             _validate_platform(
                 label,
                 entries,
                 environment_lock,
                 features,
-                context,
+                platform_context,
             )
         )
     return errors
@@ -270,7 +312,6 @@ def validate_lock(pixi: dict, lock: dict, options: LockOptions) -> list[str]:
         for package in lock["packages"]
         if "pypi" in package
     }
-    context = LockContext(options, _expectations(pixi, options), packages_by_url)
     errors = []
     for environment_name, environment_lock in lock["environments"].items():
         errors.extend(
@@ -278,7 +319,8 @@ def validate_lock(pixi: dict, lock: dict, options: LockOptions) -> list[str]:
                 pixi,
                 environment_name,
                 environment_lock,
-                context,
+                options,
+                packages_by_url,
             )
         )
     return errors
@@ -294,6 +336,7 @@ def main() -> int:
     parser.add_argument("--pypi-index-feature")
     parser.add_argument("--validate-pypi-sources", action="store_true")
     parser.add_argument("--git-url-prefix", action="append")
+    parser.add_argument("--artifact-source-root", action="append", default=[])
     args = parser.parse_args()
 
     with args.pixi_file.open("rb") as file:
@@ -309,6 +352,7 @@ def main() -> int:
             strict_pypi=args.strict_pypi,
             pypi_index_feature=args.pypi_index_feature,
             validate_pypi_sources=args.validate_pypi_sources,
+            artifact_source_roots=tuple(args.artifact_source_root),
             git_url_prefixes=(
                 tuple(args.git_url_prefix)
                 if args.git_url_prefix is not None

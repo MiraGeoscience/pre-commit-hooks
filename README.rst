@@ -57,7 +57,9 @@ names with ``--pypi-feature`` and ``--conda-feature``. Recipe security floors an
 their Pixi source are inferred from ``recipe.yaml`` and ``pixi.toml``; Git sources
 from ``git+https://github.com/MiraGeoscience/`` are allowed by default and can be
 overridden with ``--git-url-prefix``. Only enable the optional PyTorch check with
-``--check-pytorch`` when required.
+``--check-pytorch`` when required. For source validation, use the repeatable
+``--artifact-source-root`` option to permit download locations outside an
+index's URL; PyPI's standard artifact host is allowed automatically.
 
 License
 ^^^^^^^

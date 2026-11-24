@@ -36,6 +36,8 @@ def _parse_constraint(value: str) -> tuple[str, str]:
 
 
 def _as_specifier_set(value: str) -> SpecifierSet:
+    if value in ("", "*"):
+        return SpecifierSet()
     specifiers = []
     for specifier in value.split(","):
         specifier = specifier.strip()
@@ -69,7 +71,7 @@ def _pixi_constraint_sources(pixi: dict, recipe_packages: set[str]) -> dict:
     sources: dict[str, list[tuple[str, str]]] = {}
     for package, specifier in pixi.get("constraints", {}).items():
         sources.setdefault(canonicalize_name(package), []).append(
-            (str(specifier), "workspace constraint")
+            (_pixi_version(specifier), "workspace constraint")
         )
 
     top_level_packages = set(sources)
@@ -82,9 +84,18 @@ def _pixi_constraint_sources(pixi: dict, recipe_packages: set[str]) -> dict:
                     and normalized not in top_level_packages
                 ):
                     sources.setdefault(normalized, []).append(
-                        (str(specifier), f"feature {feature_name!r} {section}")
+                        (
+                            _pixi_version(specifier),
+                            f"feature {feature_name!r} {section}",
+                        )
                     )
     return sources
+
+
+def _pixi_version(specifier: object) -> str:
+    if isinstance(specifier, dict):
+        return str(specifier.get("version", ""))
+    return str(specifier)
 
 
 def _minimum_version(specifier: str) -> Version | None:
@@ -139,13 +150,19 @@ def _constraint_errors(
 def _pixi_direct_dependencies(pixi: dict) -> tuple[set[str], dict[str, set[str]]]:
     root: set[str] = set()
     features: dict[str, set[str]] = {}
-    for dependency_type in ("dependencies", "pypi-dependencies"):
-        root.update(canonicalize_name(name) for name in pixi.get(dependency_type, {}))
+
+    def dependencies(section: dict) -> set[str]:
+        tables = [section, *section.get("target", {}).values()]
+        return {
+            canonicalize_name(name)
+            for table in tables
+            for dependency_type in ("dependencies", "pypi-dependencies")
+            for name in table.get(dependency_type, {})
+        }
+
+    root.update(dependencies(pixi))
     for feature_name, feature in pixi.get("feature", {}).items():
-        for dependency_type in ("dependencies", "pypi-dependencies"):
-            features.setdefault(feature_name, set()).update(
-                canonicalize_name(name) for name in feature.get(dependency_type, {})
-            )
+        features[feature_name] = dependencies(feature)
     return root, features
 
 
@@ -180,7 +197,11 @@ def _pixi_transitivity_errors(
         for package in pixi.get("constraints", {})
     }
     direct_root_security = security_packages & root_dependencies
-    direct_feature_dependencies = set().union(*feature_dependencies.values())
+    direct_feature_dependencies = {
+        aliases.get(package, package)
+        for packages in feature_dependencies.values()
+        for package in packages
+    }
     direct_feature_security = security_packages & direct_feature_dependencies
     invalid_feature_security = direct_feature_security & top_level_constraints
     invalid_pixi_security = direct_root_security | invalid_feature_security
