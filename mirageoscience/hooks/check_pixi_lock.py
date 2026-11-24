@@ -116,9 +116,7 @@ def _expectations(pixi: dict, options: LockOptions) -> LockExpectations:
     index_urls = (
         _index_urls(pixi, index_feature) if options.validate_pypi_sources else set()
     )
-    source_roots = {
-        f"{url.removesuffix('/simple').rstrip('/')}/" for url in index_urls
-    }
+    source_roots = {f"{url.removesuffix('/simple').rstrip('/')}/" for url in index_urls}
     return LockExpectations(pypi_packages, conda_packages, index_urls, source_roots)
 
 
@@ -137,7 +135,9 @@ def _source_errors(
     errors = []
     missing_indexes = expectations.index_urls - set(environment_lock.get("indexes", []))
     if missing_indexes:
-        errors.append(f"{label}: missing configured PyPI indexes {sorted(missing_indexes)}")
+        errors.append(
+            f"{label}: missing configured PyPI indexes {sorted(missing_indexes)}"
+        )
     for entry in entries:
         url = entry.get("pypi")
         if url is None:
@@ -179,7 +179,9 @@ def _pypi_errors(
                 f"{label}: PyPI packages are locked without the "
                 f"{options.pypi_feature!r} feature: {sorted(pypi_names)}"
             )
-    errors.extend(_source_errors(label, entries, environment_lock, expected_pypi, context))
+    errors.extend(
+        _source_errors(label, entries, environment_lock, expected_pypi, context)
+    )
     return errors
 
 

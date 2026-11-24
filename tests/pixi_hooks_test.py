@@ -94,16 +94,13 @@ def test_recipe_checks_constraints_and_optional_pytorch():
     assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
 
 
-def test_recipe_supports_feature_constraint_sources_and_explicit_floors():
-    pixi = {
+def test_recipe_infers_feature_constraint_source_and_floor():
+    pixi: dict = {
         "constraints": {"filelock": ">=4.2.1", "setuptools": ">=84.1.0"},
         "feature": {
             "conda-rt": {
                 "dependencies": {
                     "pillow": "13.*",
-                    "defusedxml": ">=0.7.1",
-                    "h5py": "3.15.*",
-                    "psutil": ">=7.2.2",
                 }
             }
         },
@@ -119,26 +116,10 @@ def test_recipe_supports_feature_constraint_sources_and_explicit_floors():
         }
     }
 
-    options = RecipeOptions(
-        constraints_features=("conda-rt",),
-        security_floors=(
-            "pillow>=13.0.0",
-            "filelock>=4.2.1",
-            "setuptools>=84.1.0",
-        ),
-        allowed_direct_pixi=("pillow",),
-        required_feature_dependencies=(
-            "conda-rt:defusedxml",
-            "conda-rt:h5py",
-            "conda-rt:pillow",
-            "conda-rt:psutil",
-        ),
-    )
-    errors = validate_recipe(
-        pixi,
-        recipe,
-        {},
-        options,
-    )
+    errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
 
     assert not errors
+
+    pixi["feature"]["conda-rt"]["dependencies"]["pillow"] = "12.*"
+    errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
+    assert any("pillow" in error for error in errors)

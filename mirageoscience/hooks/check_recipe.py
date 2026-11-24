@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -25,10 +24,6 @@ from packaging.version import Version
 
 @dataclass(frozen=True)
 class RecipeOptions:
-    constraints_features: tuple[str, ...] = ()
-    security_floors: tuple[str, ...] = ()
-    allowed_direct_pixi: tuple[str, ...] = ()
-    required_feature_dependencies: tuple[str, ...] = ()
     package_aliases: tuple[str, ...] = ()
     check_pytorch: bool = False
 
@@ -38,13 +33,6 @@ def _parse_constraint(value: str) -> tuple[str, str]:
     if not separator or not specifier.strip():
         raise ValueError(f"Invalid recipe run constraint: {value!r}")
     return canonicalize_name(name), specifier.strip()
-
-
-def _parse_floor(value: str) -> tuple[str, Version]:
-    match = re.fullmatch(r"([A-Za-z0-9_.-]+)>=([A-Za-z0-9_.+-]+)", value)
-    if match is None:
-        raise ValueError(f"Invalid security floor {value!r}; expected package>=version")
-    return canonicalize_name(match.group(1)), Version(match.group(2))
 
 
 def _as_specifier_set(value: str) -> SpecifierSet:
@@ -67,17 +55,6 @@ def _project_dependency_names(project: dict) -> set[str]:
     }
 
 
-def _pixi_direct_dependencies(pixi: dict) -> set[str]:
-    direct_dependencies = set()
-    for section in (pixi, *pixi.get("feature", {}).values()):
-        for dependency_type in ("dependencies", "pypi-dependencies"):
-            direct_dependencies.update(
-                canonicalize_name(name)
-                for name in section.get(dependency_type, {})
-            )
-    return direct_dependencies
-
-
 def _package_aliases(values: tuple[str, ...]) -> dict[str, str]:
     aliases = {}
     for value in values:
@@ -88,96 +65,131 @@ def _package_aliases(values: tuple[str, ...]) -> dict[str, str]:
     return aliases
 
 
-def _feature_dependency(pixi: dict, feature: str, package: str) -> str | None:
-    feature_data = pixi.get("feature", {}).get(feature, {})
-    for dependency_type in ("dependencies", "pypi-dependencies", "constraints"):
-        dependencies = feature_data.get(dependency_type, {})
-        for name, specifier in dependencies.items():
-            if canonicalize_name(name) == package:
-                return str(specifier)
-    return None
+def _pixi_constraint_sources(pixi: dict, recipe_packages: set[str]) -> dict:
+    sources: dict[str, list[tuple[str, str]]] = {}
+    for package, specifier in pixi.get("constraints", {}).items():
+        sources.setdefault(canonicalize_name(package), []).append(
+            (str(specifier), "workspace constraint")
+        )
+
+    top_level_packages = set(sources)
+    for feature_name, feature in pixi.get("feature", {}).items():
+        for section in ("dependencies", "pypi-dependencies", "constraints"):
+            for package, specifier in feature.get(section, {}).items():
+                normalized = canonicalize_name(package)
+                if (
+                    normalized in recipe_packages
+                    and normalized not in top_level_packages
+                ):
+                    sources.setdefault(normalized, []).append(
+                        (str(specifier), f"feature {feature_name!r} {section}")
+                    )
+    return sources
 
 
-def _pixi_constraints(
-    pixi: dict, recipe_constraints: dict[str, str], features: tuple[str, ...]
-) -> dict[str, str]:
-    constraints = {
-        canonicalize_name(name): str(specifier)
-        for name, specifier in pixi.get("constraints", {}).items()
-    }
-    for feature in features:
-        for package in recipe_constraints:
-            if package not in constraints:
-                specifier = _feature_dependency(pixi, feature, package)
-                if specifier is not None:
-                    constraints[package] = specifier
-    return constraints
+def _minimum_version(specifier: str) -> Version | None:
+    versions = []
+    for item in _as_specifier_set(specifier):
+        if item.operator in (">=", ">", "~="):
+            versions.append(Version(item.version))
+        elif item.operator == "==":
+            versions.append(Version(item.version.removesuffix(".*")))
+    return max(versions, default=None)
+
+
+def _constraint_matches(recipe_specifier: str, pixi_specifier: str) -> bool:
+    recipe_set = _as_specifier_set(recipe_specifier)
+    pixi_set = _as_specifier_set(pixi_specifier)
+    if recipe_set == pixi_set:
+        return True
+    if any(item.operator not in (">=", ">") for item in recipe_set):
+        return False
+    recipe_floor = _minimum_version(recipe_specifier)
+    pixi_floor = _minimum_version(pixi_specifier)
+    return (
+        recipe_floor is not None
+        and recipe_floor == pixi_floor
+        and recipe_floor in pixi_set
+    )
 
 
 def _constraint_errors(
-    recipe_constraints: dict[str, str],
-    pixi_constraints: dict[str, str],
-    options: RecipeOptions,
+    recipe_constraints: dict[str, str], pixi_sources: dict[str, list[tuple[str, str]]]
 ) -> list[str]:
     errors = []
-    floors = dict(_parse_floor(value) for value in options.security_floors)
-    if recipe_constraints.keys() != pixi_constraints.keys():
+    if recipe_constraints.keys() != pixi_sources.keys():
         errors.append(
             "recipe.yaml run_constraints must match Pixi constraints; "
-            f"recipe={sorted(recipe_constraints)}, Pixi={sorted(pixi_constraints)}"
+            f"recipe={sorted(recipe_constraints)}, Pixi={sorted(pixi_sources)}"
         )
     for package, recipe_specifier in recipe_constraints.items():
-        pixi_specifier = pixi_constraints.get(package)
-        if pixi_specifier is None:
+        sources = pixi_sources.get(package)
+        if not sources:
             continue
-        if recipe_specifier == pixi_specifier:
-            continue
-        floor = floors.get(package)
-        if floor is None:
+        for pixi_specifier, source in sources:
+            if _constraint_matches(recipe_specifier, pixi_specifier):
+                continue
             errors.append(
-                f"{package}: recipe constraint {recipe_specifier!r} does not match "
-                f"Pixi constraint {pixi_specifier!r}"
-            )
-            continue
-        if (
-            floor not in _as_specifier_set(recipe_specifier)
-            or floor not in _as_specifier_set(pixi_specifier)
-        ):
-            errors.append(
-                f"{package}: recipe and Pixi constraints must both include "
-                f"security floor {floor}"
-            )
-    for package, floor in floors.items():
-        recipe_specifier = recipe_constraints.get(package)
-        pixi_specifier = pixi_constraints.get(package)
-        if recipe_specifier is None or floor not in _as_specifier_set(recipe_specifier):
-            errors.append(
-                f"{package}: recipe run_constraints must include security floor {floor}"
-            )
-        if pixi_specifier is None or floor not in _as_specifier_set(pixi_specifier):
-            errors.append(
-                f"{package}: Pixi constraints must include security floor {floor}"
+                f"{package}: recipe constraint {recipe_specifier!r} is not "
+                f"consistent with {source} {pixi_specifier!r}"
             )
     return errors
 
 
-def _required_feature_errors(pixi: dict, required: tuple[str, ...]) -> list[str]:
-    errors = []
-    required_dependencies = set()
-    for value in required:
-        feature, separator, package = value.partition(":")
-        if not separator or not feature or not package:
-            raise ValueError(
-                f"Invalid required feature dependency {value!r}; "
-                "expected feature:package"
+def _pixi_direct_dependencies(pixi: dict) -> tuple[set[str], dict[str, set[str]]]:
+    root: set[str] = set()
+    features: dict[str, set[str]] = {}
+    for dependency_type in ("dependencies", "pypi-dependencies"):
+        root.update(canonicalize_name(name) for name in pixi.get(dependency_type, {}))
+    for feature_name, feature in pixi.get("feature", {}).items():
+        for dependency_type in ("dependencies", "pypi-dependencies"):
+            features.setdefault(feature_name, set()).update(
+                canonicalize_name(name) for name in feature.get(dependency_type, {})
             )
-        required_dependencies.add((feature, canonicalize_name(package)))
-    for feature, package in required_dependencies:
-        if _feature_dependency(pixi, feature, package) is None:
-            errors.append(
-                f"Pixi feature {feature!r} must include dependency {package!r}"
-            )
-    return errors
+    return root, features
+
+
+def _published_transitivity_errors(
+    recipe: dict,
+    project: dict,
+    security_packages: set[str],
+    aliases: dict[str, str],
+) -> list[str]:
+    dependencies = _project_dependency_names(project)
+    dependencies.update(
+        canonicalize_name(value.split(maxsplit=1)[0].rsplit("::", 1)[-1])
+        for value in recipe["requirements"].get("run", [])
+    )
+    dependencies = {aliases.get(package, package) for package in dependencies}
+    direct_dependencies = security_packages & dependencies
+    if not direct_dependencies:
+        return []
+    return [
+        "Security-floor packages must remain transitive in the published recipe "
+        f"and project dependencies: {sorted(direct_dependencies)}"
+    ]
+
+
+def _pixi_transitivity_errors(
+    pixi: dict, security_packages: set[str], aliases: dict[str, str]
+) -> list[str]:
+    root_dependencies, feature_dependencies = _pixi_direct_dependencies(pixi)
+    root_dependencies = {aliases.get(package, package) for package in root_dependencies}
+    top_level_constraints = {
+        aliases.get(canonicalize_name(package), canonicalize_name(package))
+        for package in pixi.get("constraints", {})
+    }
+    direct_root_security = security_packages & root_dependencies
+    direct_feature_dependencies = set().union(*feature_dependencies.values())
+    direct_feature_security = security_packages & direct_feature_dependencies
+    invalid_feature_security = direct_feature_security & top_level_constraints
+    invalid_pixi_security = direct_root_security | invalid_feature_security
+    if not invalid_pixi_security:
+        return []
+    return [
+        "Security-floor packages must remain Pixi constraints, not direct "
+        f"dependencies: {sorted(invalid_pixi_security)}"
+    ]
 
 
 def _transitivity_errors(
@@ -191,37 +203,9 @@ def _transitivity_errors(
     security_packages = {
         aliases.get(package, package) for package in recipe_constraints
     }
-    project_and_recipe_dependencies = _project_dependency_names(project)
-    project_and_recipe_dependencies.update(
-        canonicalize_name(
-            value.split(maxsplit=1)[0].rsplit("::", 1)[-1]
-        )
-        for value in recipe["requirements"].get("run", [])
-    )
-    project_and_recipe_dependencies = {
-        aliases.get(package, package) for package in project_and_recipe_dependencies
-    }
-    direct_security_dependencies = security_packages & project_and_recipe_dependencies
-    errors = []
-    if direct_security_dependencies:
-        errors.append(
-            "Security-floor packages must remain transitive in the published recipe "
-            f"and project dependencies: {sorted(direct_security_dependencies)}"
-        )
-    allowed_pixi = {
-        canonicalize_name(name) for name in options.allowed_direct_pixi
-    }
-    pixi_direct_dependencies = {
-        aliases.get(package, package) for package in _pixi_direct_dependencies(pixi)
-    }
-    pixi_direct = security_packages & pixi_direct_dependencies
-    disallowed_direct_pixi = pixi_direct - allowed_pixi
-    if disallowed_direct_pixi:
-        errors.append(
-            "Security-floor packages must remain transitive Pixi dependencies: "
-            f"{sorted(disallowed_direct_pixi)}"
-        )
-    return errors
+    return _published_transitivity_errors(
+        recipe, project, security_packages, aliases
+    ) + _pixi_transitivity_errors(pixi, security_packages, aliases)
 
 
 def _pytorch_errors(recipe: dict) -> list[str]:
@@ -247,11 +231,8 @@ def validate_recipe(
         _parse_constraint(value)
         for value in recipe["requirements"].get("run_constraints", [])
     )
-    pixi_constraints = _pixi_constraints(
-        pixi, recipe_constraints, options.constraints_features
-    )
-    errors = _constraint_errors(recipe_constraints, pixi_constraints, options)
-    errors.extend(_required_feature_errors(pixi, options.required_feature_dependencies))
+    pixi_sources = _pixi_constraint_sources(pixi, set(recipe_constraints))
+    errors = _constraint_errors(recipe_constraints, pixi_sources)
     errors.extend(
         _transitivity_errors(pixi, recipe, project, recipe_constraints, options)
     )
@@ -265,10 +246,6 @@ def main() -> int:
     parser.add_argument("--pixi-file", type=Path, default=Path("pixi.toml"))
     parser.add_argument("--recipe-file", type=Path, default=Path("recipe.yaml"))
     parser.add_argument("--project-file", type=Path, default=Path("pyproject.toml"))
-    parser.add_argument("--constraints-feature", action="append", default=[])
-    parser.add_argument("--security-floor", action="append", default=[])
-    parser.add_argument("--allow-direct-pixi", action="append", default=[])
-    parser.add_argument("--require-feature-dependency", action="append", default=[])
     parser.add_argument("--package-alias", action="append", default=[])
     parser.add_argument("--check-pytorch", action="store_true")
     args = parser.parse_args()
@@ -284,10 +261,6 @@ def main() -> int:
         recipe,
         project,
         RecipeOptions(
-            constraints_features=tuple(args.constraints_feature),
-            security_floors=tuple(args.security_floor),
-            allowed_direct_pixi=tuple(args.allow_direct_pixi),
-            required_feature_dependencies=tuple(args.require_feature_dependency),
             package_aliases=tuple(args.package_alias),
             check_pytorch=args.check_pytorch,
         ),

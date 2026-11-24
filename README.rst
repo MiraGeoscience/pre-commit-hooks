@@ -16,8 +16,9 @@ Included Hooks
    declared by the selected PyPI feature; otherwise transitive PyPI dependencies
    are allowed while the feature packages are still checked.
 -  ``check-recipe``: Checks recipe ``run_constraints`` against Pixi constraints,
-   verifies constrained packages remain transitive, and optionally checks that
-   the recipe leaves PyTorch backend selection to the installer.
+   discovers matching feature constraints from ``pixi.toml``, verifies constrained
+   packages remain transitive in published dependencies, and optionally checks
+   that the recipe leaves PyTorch backend selection to the installer.
 -  ``prepare-commit-msg``: Adds the JIRA ID found in the branch name
    in case it is missing from the commit message.
 -  ``check-commit-message``: Checks that the branch name or the commit
@@ -50,10 +51,9 @@ Example of ``.pre-commit-config.yamnl``:
 
 The Pixi hooks read ``pixi.toml``, ``pixi.lock``, ``recipe.yaml``, and
 ``pyproject.toml`` from the repository root by default. Configure differing
-feature names with ``--pypi-feature`` and ``--conda-feature``. For recipe
-workspaces with additional Pixi dependency features, ``--constraints-feature``
-can be repeated; use ``--security-floor`` and ``--require-feature-dependency``
-to define package-specific security requirements.
+feature names with ``--pypi-feature`` and ``--conda-feature``. Recipe security
+floors and their Pixi source are inferred from ``recipe.yaml`` and ``pixi.toml``;
+only enable the optional PyTorch check with ``--check-pytorch`` when required.
 
 License
 ^^^^^^^
