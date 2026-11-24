@@ -15,13 +15,17 @@ import pytest
 
 from mirageoscience.hooks.check_pixi_lock import (
     LockOptions,
-    main as check_pixi_lock_main,
     validate_lock,
+)
+from mirageoscience.hooks.check_pixi_lock import (
+    main as check_pixi_lock_main,
 )
 from mirageoscience.hooks.check_recipe import (
     RecipeOptions,
-    main as check_recipe_main,
     validate_recipe,
+)
+from mirageoscience.hooks.check_recipe import (
+    main as check_recipe_main,
 )
 
 
