@@ -157,6 +157,35 @@ def _expectations(pixi: dict, options: LockOptions, platform: str) -> LockExpect
     return LockExpectations(pypi_packages, conda_packages, index_urls, source_roots)
 
 
+def _allowed_git_source(url: str, prefixes: tuple[str, ...]) -> bool:
+    if any(ord(char) < 32 or ord(char) == 127 for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        path = parsed.path
+        while True:
+            decoded = unquote(path)
+            if decoded == path:
+                break
+            if decoded.count("/") != path.count("/"):
+                return False
+            path = decoded
+        if (
+            "\\" in path
+            or any(ord(char) < 32 or ord(char) == 127 for char in path)
+            or any(segment in {".", ".."} for segment in path.split("/"))
+        ):
+            return False
+        return any(
+            url.startswith(prefix)
+            and parsed.scheme == urlsplit(prefix).scheme
+            and parsed.netloc == urlsplit(prefix).netloc
+            for prefix in prefixes
+        )
+    except ValueError:
+        return False
+
+
 def _source_errors(
     label: str,
     entries: list[dict],
@@ -180,7 +209,7 @@ def _source_errors(
         if url is None:
             continue
         if url.startswith("git+"):
-            if not any(url.startswith(prefix) for prefix in options.git_url_prefixes):
+            if not _allowed_git_source(url, options.git_url_prefixes):
                 errors.append(f"{label}: unexpected Git source {url}")
         elif not any(url.startswith(root) for root in expectations.source_roots):
             errors.append(f"{label}: unexpected PyPI source {url}")

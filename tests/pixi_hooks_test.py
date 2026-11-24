@@ -103,6 +103,51 @@ def test_pypi_source_validation_defaults_to_mira_git_urls():
     assert not errors
 
 
+@pytest.mark.parametrize(
+    "git_url",
+    [
+        "git+https://github.com/MiraGeoscience/../attacker/package.git",
+        "git+https://github.com/MiraGeoscience/%2e%2e/attacker/package.git",
+        "git+https://github.com/MiraGeoscience/%252e%252e/attacker/package.git",
+        "git+https://github.com/MiraGeoscience/%2f..%2fattacker/package.git",
+        "git+https://github.com/MiraGeoscience/%252f..%252fattacker/package.git",
+        "git+https://github.com/MiraGeoscience/%5c..%5cattacker/package.git",
+        "git+https://github.com/MiraGeoscience/package%0a.git",
+        "git+https://github.com/MiraGeoscience/..\\attacker/package.git",
+    ],
+)
+def test_pypi_source_validation_rejects_git_path_traversal(git_url):
+    pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
+    lock["packages"][0]["pypi"] = git_url
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": git_url}]
+
+    errors = validate_lock(
+        pixi, lock, LockOptions("mira-pypi", validate_pypi_sources=True)
+    )
+
+    assert any("unexpected Git source" in error for error in errors)
+
+
+def test_pypi_source_validation_matches_git_host_for_custom_prefix():
+    pixi, lock = _lock_fixture(features=["mira-pypi"], pypi_names=("mira-package",))
+    url = "git+https://github.com.evil.example/MiraGeoscience/package.git"
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    options = LockOptions(
+        "mira-pypi",
+        validate_pypi_sources=True,
+        git_url_prefixes=("git+https://github.com",),
+    )
+    assert any(
+        "unexpected Git source" in error for error in validate_lock(pixi, lock, options)
+    )
+
+    url = "git+https://github.com/other/package%2dname.git@v1.0#subdirectory=python"
+    lock["packages"][0]["pypi"] = url
+    lock["environments"]["default"]["packages"]["win-64"] = [{"pypi": url}]
+    assert not validate_lock(pixi, lock, options)
+
+
 def test_target_specific_feature_dependencies_are_checked_per_platform():
     pixi, lock = _lock_fixture(features=["mira-pypi", "conda-rt"])
     pixi["feature"]["mira-pypi"] = {
