@@ -262,6 +262,47 @@ def test_recipe_checks_constraints_and_optional_pytorch():
     assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
 
 
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "pytorch",
+        "pytorch >=2.13.0,<2.15.0",
+        "conda-forge::pytorch >=2.13.0, <2.15.0",
+        "pytorch=2.14",
+        "pytorch-lightning >=2.0",
+    ],
+)
+def test_recipe_allows_backend_neutral_pytorch(dependency):
+    recipe = {"requirements": {"run": [dependency]}}
+    assert not validate_recipe({}, recipe, {}, RecipeOptions(check_pytorch=True))
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "pytorch-cpu >=2.0",
+        "conda-forge::pytorch_gpu >=2.0",
+        "pytorch-cuda >=12",
+        "cpuonly",
+        "pytorch >=2.0 cpu*",
+        "pytorch=2.14=*cuda*",
+        "pytorch[version='>=2.0',build='cuda*']",
+        "pytorch-mutex 1.0 cuda",
+    ],
+)
+def test_recipe_rejects_pytorch_backend_selection(dependency):
+    recipe = {"requirements": {"run": [dependency]}}
+    errors = validate_recipe({}, recipe, {}, RecipeOptions(check_pytorch=True))
+    assert any("PyTorch backend selection" in error for error in errors)
+    assert not validate_recipe({}, recipe, {}, RecipeOptions())
+
+
+def test_recipe_rejects_pytorch_backend_run_constraint():
+    recipe = {"requirements": {"run_constraints": ["pytorch >=2.0 cpu*"]}}
+    errors = validate_recipe({}, recipe, {}, RecipeOptions(check_pytorch=True))
+    assert any("PyTorch backend selection" in error for error in errors)
+
+
 def test_recipe_infers_feature_constraint_source_and_floor():
     pixi: dict = {
         "constraints": {"filelock": ">=4.2.1", "setuptools": ">=84.1.0"},

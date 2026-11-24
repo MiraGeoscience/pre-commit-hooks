@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -230,18 +231,24 @@ def _transitivity_errors(
 
 
 def _pytorch_errors(recipe: dict) -> list[str]:
-    packages = {
-        canonicalize_name(value.split(maxsplit=1)[0].rsplit("::", 1)[-1])
-        for value in recipe["requirements"].get("run", [])
-    }
-    pytorch_packages = sorted(
-        package for package in packages if package.startswith("pytorch")
-    )
-    if not pytorch_packages:
+    backend_specs = []
+    for section in ("run", "run_constraints"):
+        for value in recipe["requirements"].get(section, []):
+            match = re.match(r"^(?:[^\s:]+::)?([a-zA-Z0-9_.-]+)(.*)$", value.strip())
+            if not match:
+                continue
+            package = canonicalize_name(match.group(1))
+            specifier = match.group(2)
+            if package in {"pytorch-cpu", "pytorch-gpu", "pytorch-cuda", "cpuonly"} or (
+                package in {"pytorch", "pytorch-mutex"}
+                and re.search(r"cpu|cuda|gpu", specifier, re.IGNORECASE)
+            ):
+                backend_specs.append(f"{section}: {value}")
+    if not backend_specs:
         return []
     return [
-        "recipe.yaml requirements.run must leave PyTorch backend selection "
-        f"to the installer; found: {pytorch_packages}"
+        "recipe.yaml requirements must leave PyTorch backend selection "
+        f"to the installer; found: {backend_specs}"
     ]
 
 
