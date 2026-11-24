@@ -5,6 +5,22 @@
     language: python
     types: [text]
 
+-   id: check-pixi-lock
+    name: check Pixi lock package sources
+    description: check locked Conda and PyPI sources against Pixi workspace features
+    entry: check_pixi_lock
+    language: python
+    additional_dependencies: [packaging>=25, PyYAML>=6]
+    pass_filenames: false
+
+-   id: check-recipe
+    name: check recipe constraints
+    description: check recipe security constraints and optional PyTorch backend policy
+    entry: check_recipe
+    language: python
+    additional_dependencies: [packaging>=25, PyYAML>=6]
+    pass_filenames: false
+
 -   id: prepare-commit-msg
     name: prepare commit message
     description: add the JIRA ID found in the branch name in case it is missing from the commit message
