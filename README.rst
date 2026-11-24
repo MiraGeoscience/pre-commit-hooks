@@ -50,10 +50,14 @@ Example of ``.pre-commit-config.yamnl``:
       -  id: check-commit-msg
 
 The Pixi hooks read ``pixi.toml``, ``pixi.lock``, ``recipe.yaml``, and
-``pyproject.toml`` from the repository root by default. Configure differing
-feature names with ``--pypi-feature`` and ``--conda-feature``. Recipe security
-floors and their Pixi source are inferred from ``recipe.yaml`` and ``pixi.toml``;
-only enable the optional PyTorch check with ``--check-pytorch`` when required.
+``pyproject.toml`` from the repository root by default. They also provide default
+file filters for these workspace files and the pre-commit configuration, so
+consumer configs do not need to repeat ``files``. Configure differing feature
+names with ``--pypi-feature`` and ``--conda-feature``. Recipe security floors and
+their Pixi source are inferred from ``recipe.yaml`` and ``pixi.toml``; Git sources
+from ``git+https://github.com/MiraGeoscience/`` are allowed by default and can be
+overridden with ``--git-url-prefix``. Only enable the optional PyTorch check with
+``--check-pytorch`` when required.
 
 License
 ^^^^^^^

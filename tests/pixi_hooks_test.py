@@ -72,6 +72,35 @@ def test_non_strict_pypi_allows_transitive_packages_for_meta_packages():
     assert not errors
 
 
+def test_pypi_source_validation_defaults_to_mira_git_urls():
+    index = "https://packages.example.org/simple"
+    git_url = "git+https://github.com/MiraGeoscience/mira-package.git"
+    pixi, lock = _lock_fixture(
+        features=["mira-pypi"],
+        pypi_names=("mira-package", "mira-git-package"),
+    )
+    pixi["feature"]["mira-pypi"]["pypi-options"] = {"index-url": index}
+    pixi["feature"]["mira-pypi"]["pypi-dependencies"]["mira-git-package"] = "*"
+    lock["packages"][0]["pypi"] = f"{index.removesuffix('/simple')}/mira-package.whl"
+    lock["packages"][1]["pypi"] = git_url
+    lock["environments"]["default"]["indexes"] = [index]
+    lock["environments"]["default"]["packages"]["win-64"] = [
+        {"pypi": package["pypi"]} for package in lock["packages"]
+    ]
+
+    errors = validate_lock(
+        pixi,
+        lock,
+        LockOptions(
+            pypi_feature="mira-pypi",
+            strict_pypi=True,
+            validate_pypi_sources=True,
+        ),
+    )
+
+    assert not errors
+
+
 def test_recipe_checks_constraints_and_optional_pytorch():
     pixi = {
         "constraints": {"filelock": ">=4.2.1"},

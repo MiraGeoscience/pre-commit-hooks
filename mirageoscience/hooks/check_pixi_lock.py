@@ -20,6 +20,9 @@ import yaml
 from packaging.utils import canonicalize_name
 
 
+DEFAULT_GIT_URL_PREFIXES = ("git+https://github.com/MiraGeoscience/",)
+
+
 @dataclass(frozen=True)
 class LockOptions:
     pypi_feature: str
@@ -27,7 +30,7 @@ class LockOptions:
     strict_pypi: bool = False
     pypi_index_feature: str | None = None
     validate_pypi_sources: bool = False
-    git_url_prefixes: tuple[str, ...] = ()
+    git_url_prefixes: tuple[str, ...] = DEFAULT_GIT_URL_PREFIXES
 
 
 @dataclass(frozen=True)
@@ -290,7 +293,7 @@ def main() -> int:
     parser.add_argument("--strict-pypi", action="store_true")
     parser.add_argument("--pypi-index-feature")
     parser.add_argument("--validate-pypi-sources", action="store_true")
-    parser.add_argument("--git-url-prefix", action="append", default=[])
+    parser.add_argument("--git-url-prefix", action="append")
     args = parser.parse_args()
 
     with args.pixi_file.open("rb") as file:
@@ -306,7 +309,11 @@ def main() -> int:
             strict_pypi=args.strict_pypi,
             pypi_index_feature=args.pypi_index_feature,
             validate_pypi_sources=args.validate_pypi_sources,
-            git_url_prefixes=tuple(args.git_url_prefix),
+            git_url_prefixes=(
+                tuple(args.git_url_prefix)
+                if args.git_url_prefix is not None
+                else DEFAULT_GIT_URL_PREFIXES
+            ),
         ),
     )
     if errors:

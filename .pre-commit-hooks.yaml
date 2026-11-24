@@ -12,6 +12,7 @@
     language: python
     additional_dependencies: [packaging>=25, PyYAML>=6]
     pass_filenames: false
+    files: ^(pixi\.toml|pixi\.lock|\.pre-commit-config\.yaml|prek\.toml)$
 
 -   id: check-recipe
     name: check recipe constraints
@@ -20,6 +21,7 @@
     language: python
     additional_dependencies: [packaging>=25, PyYAML>=6]
     pass_filenames: false
+    files: ^(recipe\.yaml|pixi\.toml|pyproject\.toml|\.pre-commit-config\.yaml|prek\.toml)$
 
 -   id: prepare-commit-msg
     name: prepare commit message
