@@ -39,7 +39,6 @@ requires-poetry = ">=2.2.0"
 
 include = [
     "LICENSE",
-    "README.rst",
     { path = "mirageoscience/hooks/_version.py", format = ["sdist", "wheel"] },
 ]
 
