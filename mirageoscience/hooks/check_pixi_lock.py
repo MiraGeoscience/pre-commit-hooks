@@ -54,6 +54,7 @@ class LockContext:
 def _feature_dependencies(
     pixi: dict, feature_name: str, dependency_type: str, platform: str
 ) -> set[str]:
+    """Resolve feature dependencies, including matching platform-target overrides."""
     try:
         feature = pixi["feature"][feature_name]
     except KeyError as error:
@@ -84,6 +85,7 @@ def _feature_dependencies(
 
 
 def _environment_features(environment: object) -> set[str]:
+    """Normalize a Pixi environment definition to its feature-name set."""
     if isinstance(environment, dict):
         features = environment.get("features", [])
     else:
@@ -96,6 +98,7 @@ def _environment_features(environment: object) -> set[str]:
 def _locked_names(
     entries: list[dict], packages_by_url: dict[str, str], source: str
 ) -> set[str]:
+    """Extract canonical package names from PyPI or Conda lock entries."""
     names = set()
     for entry in entries:
         url = entry.get(source)
@@ -120,6 +123,7 @@ def _locked_names(
 
 
 def _pypi_options(pixi: dict, feature_name: str | None) -> dict:
+    """Merge PyPI options in top-level, workspace, then feature precedence."""
     options = dict(pixi.get("pypi-options", {}))
     options.update(pixi.get("workspace", {}).get("pypi-options", {}))
     if feature_name is not None:
@@ -130,6 +134,7 @@ def _pypi_options(pixi: dict, feature_name: str | None) -> dict:
 
 
 def _index_urls(pixi: dict, feature_name: str | None) -> set[str]:
+    """Return configured PyPI index URLs without trailing slashes."""
     options = _pypi_options(pixi, feature_name)
     urls = set()
     if url := options.get("index-url"):
@@ -141,6 +146,7 @@ def _index_urls(pixi: dict, feature_name: str | None) -> set[str]:
 def _expectations(
     pixi: dict, options: LockOptions, platform: str, features: set[str]
 ) -> LockExpectations:
+    """Build platform-specific package and artifact-source expectations."""
     pypi_packages = _feature_dependencies(
         pixi, options.pypi_feature, "pypi-dependencies", platform
     )
@@ -171,6 +177,7 @@ def _expectations(
 
 
 def _allowed_git_source(url: str, prefixes: tuple[str, ...]) -> bool:
+    """Check an allowed Git URL prefix and reject unsafe path segments."""
     if any(ord(char) < 32 or ord(char) == 127 for char in url):
         return False
     try:
@@ -206,6 +213,7 @@ def _source_errors(
     pypi_feature_enabled: bool,
     context: LockContext,
 ) -> list[str]:
+    """Report missing indexes and PyPI or Git sources outside allowed roots."""
     options = context.options
     expectations = context.expectations
     if not options.validate_pypi_sources or not pypi_feature_enabled:
@@ -236,6 +244,7 @@ def _pypi_errors(
     features: set[str],
     context: LockContext,
 ) -> list[str]:
+    """Check locked PyPI packages, using exact or minimum membership policy."""
     options = context.options
     expectations = context.expectations
     pypi_names = _locked_names(entries, context.packages_by_url, "pypi")
@@ -273,6 +282,7 @@ def _conda_errors(
     features: set[str],
     context: LockContext,
 ) -> list[str]:
+    """Check expected packages are locked from their configured package source."""
     options = context.options
     expected_conda = (
         context.expectations.conda_packages
@@ -310,6 +320,7 @@ def _validate_platform(
     features: set[str],
     context: LockContext,
 ) -> list[str]:
+    """Validate locked package names and sources for one platform."""
     pypi_names = _locked_names(entries, context.packages_by_url, "pypi")
     conda_names = _locked_names(entries, context.packages_by_url, "conda")
     return _pypi_errors(
@@ -324,6 +335,7 @@ def _validate_environment(
     options: LockOptions,
     packages_by_url: dict[str, str],
 ) -> list[str]:
+    """Validate every locked platform for one Pixi environment."""
     environment_config = pixi.get("environments", {}).get(environment_name)
     if environment_config is None:
         if environment_name != "default":
@@ -349,6 +361,7 @@ def _validate_environment(
 
 
 def validate_lock(pixi: dict, lock: dict, options: LockOptions) -> list[str]:
+    """Validate all lock environments against the Pixi feature configuration."""
     packages_by_url = {
         package["pypi"]: package["name"]
         for package in lock["packages"]
@@ -369,6 +382,7 @@ def validate_lock(pixi: dict, lock: dict, options: LockOptions) -> list[str]:
 
 
 def main() -> int:
+    """Load CLI inputs, validate the lock, and return the process status."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--pixi-file", type=Path, default=Path("pixi.toml"))
     parser.add_argument("--lock-file", type=Path, default=Path("pixi.lock"))

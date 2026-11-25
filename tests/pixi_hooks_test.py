@@ -76,13 +76,11 @@ pypi-dependencies = {}
 def test_recipe_main_parses_toml_11_inline_tables(tmp_path, monkeypatch, capsys):
     pixi_file = tmp_path / "pixi.toml"
     recipe_file = tmp_path / "recipe.yaml"
-    project_file = tmp_path / "pyproject.toml"
     pixi_file.write_text(_multiline_pixi_manifest(), encoding="utf-8")
     recipe_file.write_text(
         "requirements:\n  run_constraints:\n    - filelock >=4.2.1\n",
         encoding="utf-8",
     )
-    project_file.write_text("[project]\ndependencies = []\n", encoding="utf-8")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -92,8 +90,6 @@ def test_recipe_main_parses_toml_11_inline_tables(tmp_path, monkeypatch, capsys)
             str(pixi_file),
             "--recipe-file",
             str(recipe_file),
-            "--project-file",
-            str(project_file),
         ],
     )
 
@@ -403,13 +399,13 @@ def test_recipe_checks_constraints_and_optional_pytorch():
     }
 
     options = RecipeOptions(check_pytorch=True)
-    errors = validate_recipe(pixi, recipe, {}, options)
+    errors = validate_recipe(pixi, recipe, options)
 
     assert not errors
     recipe["requirements"]["run"].append("pytorch-cpu >=2.0")
-    errors = validate_recipe(pixi, recipe, {}, options)
+    errors = validate_recipe(pixi, recipe, options)
     assert any("PyTorch backend selection" in error for error in errors)
-    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
+    assert not validate_recipe(pixi, recipe, RecipeOptions())
 
 
 @pytest.mark.parametrize(
@@ -424,7 +420,7 @@ def test_recipe_checks_constraints_and_optional_pytorch():
 )
 def test_recipe_allows_backend_neutral_pytorch(dependency):
     recipe = {"requirements": {"run": [dependency]}}
-    assert not validate_recipe({}, recipe, {}, RecipeOptions(check_pytorch=True))
+    assert not validate_recipe({}, recipe, RecipeOptions(check_pytorch=True))
 
 
 @pytest.mark.parametrize(
@@ -442,14 +438,14 @@ def test_recipe_allows_backend_neutral_pytorch(dependency):
 )
 def test_recipe_rejects_pytorch_backend_selection(dependency):
     recipe = {"requirements": {"run": [dependency]}}
-    errors = validate_recipe({}, recipe, {}, RecipeOptions(check_pytorch=True))
+    errors = validate_recipe({}, recipe, RecipeOptions(check_pytorch=True))
     assert any("PyTorch backend selection" in error for error in errors)
-    assert not validate_recipe({}, recipe, {}, RecipeOptions())
+    assert not validate_recipe({}, recipe, RecipeOptions())
 
 
 def test_recipe_rejects_pytorch_backend_run_constraint():
     recipe = {"requirements": {"run_constraints": ["pytorch >=2.0 cpu*"]}}
-    errors = validate_recipe({}, recipe, {}, RecipeOptions(check_pytorch=True))
+    errors = validate_recipe({}, recipe, RecipeOptions(check_pytorch=True))
     assert any("PyTorch backend selection" in error for error in errors)
 
 
@@ -475,12 +471,12 @@ def test_recipe_infers_feature_constraint_source_and_floor():
         }
     }
 
-    errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
+    errors = validate_recipe(pixi, recipe, RecipeOptions())
 
     assert not errors
 
     pixi["feature"]["conda-rt"]["dependencies"]["pillow"] = "12.*"
-    errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
+    errors = validate_recipe(pixi, recipe, RecipeOptions())
     assert any("pillow" in error for error in errors)
 
 
@@ -494,7 +490,7 @@ def test_recipe_parses_conda_constraints_without_spaces(
     pixi = {"constraints": {"urllib3": pixi_constraint}}
     recipe = {"requirements": {"run_constraints": [recipe_constraint]}}
 
-    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
+    assert not validate_recipe(pixi, recipe, RecipeOptions())
 
 
 def test_recipe_rejects_conditional_run_constraints():
@@ -506,11 +502,34 @@ def test_recipe_rejects_conditional_run_constraints():
         }
     }
 
-    errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
+    errors = validate_recipe(pixi, recipe, RecipeOptions())
     assert any(
         "Conditional run_constraints are not supported" in error for error in errors
     )
     assert any("--ignore-constraints" in error for error in errors)
+
+
+def test_recipe_checks_pytorch_in_run_and_conditional_run_constraints():
+    recipe = {
+        "requirements": {
+            "run": ["pytorch-cpu >=2.0"],
+            "run_constraints": [
+                {"if": "win", "then": "pytorch-cuda >=12"},
+                "pytorch-mutex 1.0 cuda",
+            ],
+        }
+    }
+
+    errors = validate_recipe({}, recipe, RecipeOptions(check_pytorch=True))
+
+    assert any(
+        "Conditional run_constraints are not supported" in error for error in errors
+    )
+    pytorch_errors = [error for error in errors if "PyTorch backend selection" in error]
+    assert len(pytorch_errors) == 1
+    assert "run: pytorch-cpu" in pytorch_errors[0]
+    assert "run_constraints: pytorch-cuda" in pytorch_errors[0]
+    assert "run_constraints: pytorch-mutex 1.0 cuda" in pytorch_errors[0]
 
 
 def test_recipe_ignores_conditional_constraint_validation_when_requested():
@@ -522,8 +541,45 @@ def test_recipe_ignores_conditional_constraint_validation_when_requested():
         }
     }
 
-    errors = validate_recipe(pixi, recipe, {}, RecipeOptions(ignore_constraints=True))
+    errors = validate_recipe(pixi, recipe, RecipeOptions(ignore_constraints=True))
     assert not errors
+
+
+def test_recipe_checks_transitivity_for_ignored_conditional_constraints():
+    pixi = {
+        "constraints": {
+            "filelock": ">=4.2.1",
+            "setuptools": ">=84.1.0",
+        }
+    }
+    recipe = {
+        "requirements": {
+            "run": ["filelock >=4.2.1", "setuptools >=84.1.0"],
+            "run_constraints": [
+                {"if": "win", "then": "filelock >=4.2.1"},
+                "setuptools >=84.1.0",
+            ],
+        }
+    }
+
+    errors = validate_recipe(pixi, recipe, RecipeOptions(ignore_constraints=True))
+    transitivity_errors = [error for error in errors if "must remain" in error]
+    assert len(transitivity_errors) == 1
+    assert "['filelock', 'setuptools']" in transitivity_errors[0]
+
+
+def test_recipe_checks_pytorch_in_ignored_conditional_constraints():
+    recipe = {
+        "requirements": {
+            "run_constraints": [{"if": "win", "then": "pytorch-cpu >=2.0"}]
+        }
+    }
+
+    errors = validate_recipe(
+        {}, recipe, RecipeOptions(check_pytorch=True, ignore_constraints=True)
+    )
+
+    assert any("PyTorch backend selection" in error for error in errors)
 
 
 def test_recipe_accepts_inline_versions_but_rejects_versionless_dependencies():
@@ -537,38 +593,8 @@ def test_recipe_accepts_inline_versions_but_rejects_versionless_dependencies():
         }
     }
     recipe = {"requirements": {"run_constraints": ["pillow >=13.0.0"]}}
-    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
+    assert not validate_recipe(pixi, recipe, RecipeOptions())
     pixi["feature"]["conda-rt"]["dependencies"]["pillow"] = {"path": "../pillow"}
     assert any(
-        "pillow" in error
-        for error in validate_recipe(pixi, recipe, {}, RecipeOptions())
-    )
-
-
-@pytest.mark.parametrize("section", ["root", "feature"])
-def test_recipe_rejects_target_specific_direct_security_dependencies(section):
-    pixi: dict = {"constraints": {"filelock": ">=4.2.1"}}
-    target = {"win-64": {"dependencies": {"filelock": "*"}}}
-    if section == "root":
-        pixi["target"] = target
-    else:
-        pixi["feature"] = {"extra": {"target": target}}
-    recipe = {"requirements": {"run_constraints": ["filelock >=4.2.1"]}}
-    assert any(
-        "not direct dependencies" in error
-        for error in validate_recipe(pixi, recipe, {}, RecipeOptions())
-    )
-
-
-def test_recipe_applies_aliases_to_feature_dependencies():
-    pixi = {
-        "constraints": {"pytorch": ">=2.0"},
-        "feature": {"extra": {"pypi-dependencies": {"torch": "*"}}},
-    }
-    recipe = {"requirements": {"run_constraints": ["pytorch >=2.0"]}}
-    assert any(
-        "not direct dependencies" in error
-        for error in validate_recipe(
-            pixi, recipe, {}, RecipeOptions(package_aliases=("torch=pytorch",))
-        )
+        "pillow" in error for error in validate_recipe(pixi, recipe, RecipeOptions())
     )

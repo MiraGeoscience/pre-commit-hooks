@@ -11,10 +11,14 @@ Checks for valid copyright statements in files.
 Checks locked Conda and PyPI sources against Pixi workspace features.
 `--strict-pypi` requires the lock to contain exactly the packages declared by the selected PyPI feature; otherwise transitive PyPI dependencies are allowed while the feature packages are still checked.
 
-The default workspace detection reads `pixi.toml`, `pixi.lock`, and `pyproject.toml` from the repository root. Configure differing feature names with `--pypi-feature` and `--conda-feature`.
+By default, this hook reads `pixi.toml` and `pixi.lock` from the repository root. Configure differing feature names with `--pypi-feature` and `--conda-feature`.
 
 ### `check-recipe`
-Checks recipe `run_constraints` against Pixi constraints, discovers matching feature constraints from `pixi.toml`, verifies constrained packages remain transitive in published dependencies, and optionally checks that the recipe leaves PyTorch backend selection to the installer.
+Checks recipe `run_constraints` against Pixi constraints, discovers matching feature constraints from `pixi.toml`, verifies constrained packages are not also direct dependencies in recipe `run`, and optionally checks that the recipe leaves PyTorch backend selection to the installer.
+
+By default, this hook reads `recipe.yaml` and `pixi.toml` from the repository root.
+
+Dependency consistency is checked by `pip check` during recipe builds; this hook focuses on ensuring recipe and Pixi constraints agree.
 
 Conditional `run_constraints` are not supported by the recipe validation; use unconditional constraints or pass `--ignore-constraints` to skip this specific constraint comparison.
 
