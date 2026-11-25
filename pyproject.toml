@@ -29,7 +29,6 @@ dev = [
     "pytest",
     "pytest-mock",
     "pytest-cov",
-    "tomli",
 ]
 
 [tool.poetry]
