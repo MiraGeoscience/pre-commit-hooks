@@ -302,7 +302,8 @@ def validate_recipe(
     conditional_run_constraints = [
         value
         for value in run_constraints
-        if isinstance(value, dict) and any(key in value for key in ("if", "then", "else"))
+        if isinstance(value, dict)
+        and any(key in value for key in ("if", "then", "else"))
     ]
     if conditional_run_constraints and not options.ignore_constraints:
         errors.append(
@@ -314,8 +315,7 @@ def validate_recipe(
 
     if not conditional_run_constraints:
         recipe_constraints = dict(
-            _parse_constraint(value)
-            for value in _requirement_strings(run_constraints)
+            _parse_constraint(value) for value in _requirement_strings(run_constraints)
         )
         pixi_sources = _pixi_constraint_sources(pixi, set(recipe_constraints))
         errors.extend(_constraint_errors(recipe_constraints, pixi_sources))
