@@ -497,7 +497,7 @@ def test_recipe_parses_conda_constraints_without_spaces(
     assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
 
 
-def test_recipe_reads_conditional_run_constraints():
+def test_recipe_rejects_conditional_run_constraints():
     pixi = {"constraints": {"filelock": ">=4.2.1"}}
     recipe = {
         "requirements": {
@@ -506,7 +506,24 @@ def test_recipe_reads_conditional_run_constraints():
         }
     }
 
-    assert not validate_recipe(pixi, recipe, {}, RecipeOptions())
+    errors = validate_recipe(pixi, recipe, {}, RecipeOptions())
+    assert any(
+        "Conditional run_constraints are not supported" in error for error in errors
+    )
+    assert any("--ignore-constraints" in error for error in errors)
+
+
+def test_recipe_ignores_conditional_constraint_validation_when_requested():
+    pixi = {"constraints": {"filelock": ">=4.2.1"}}
+    recipe = {
+        "requirements": {
+            "run": ["python >=3.12"],
+            "run_constraints": [{"if": "win", "then": "filelock >=4.2.1"}],
+        }
+    }
+
+    errors = validate_recipe(pixi, recipe, {}, RecipeOptions(ignore_constraints=True))
+    assert not errors
 
 
 def test_recipe_accepts_inline_versions_but_rejects_versionless_dependencies():

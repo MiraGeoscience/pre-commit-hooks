@@ -7,6 +7,14 @@
 #  of the MIT License (see LICENSE file at the root of this source code package).   '
 # '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
+"""Validate conda recipe constraints against the Pixi workspace.
+
+Conditional ``run_constraints`` entries are not supported by the Conda recipe
+comparison because they are flattened to a single effective constraint rather than
+one unconditional value. Use unconditional constraints or pass
+``--ignore-constraints`` to skip this specific comparison.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -27,6 +35,7 @@ from packaging.version import Version
 class RecipeOptions:
     package_aliases: tuple[str, ...] = ()
     check_pytorch: bool = False
+    ignore_constraints: bool = False
 
 
 def _parse_constraint(value: str) -> tuple[str, str]:
@@ -63,11 +72,14 @@ def _requirement_strings(values: object):
         for value in values:
             yield from _requirement_strings(value)
         return
-    if isinstance(values, dict) and "then" in values:
-        yield from _requirement_strings(values["then"])
-        if "else" in values:
-            yield from _requirement_strings(values["else"])
-        return
+    if isinstance(values, dict):
+        if "if" in values or "then" in values or "else" in values:
+            raise ValueError(
+                "Conditional recipe requirements are not supported by "
+                "check-conda-recipe; pass --ignore-constraints to skip this check "
+                "for conditional constraints, or use unconditional constraints."
+            )
+        raise ValueError(f"Invalid recipe requirement entry: {values!r}")
     raise ValueError(f"Invalid recipe requirement entry: {values!r}")
 
 
@@ -285,17 +297,31 @@ def _pytorch_errors(recipe: dict) -> list[str]:
 def validate_recipe(
     pixi: dict, recipe: dict, project: dict, options: RecipeOptions
 ) -> list[str]:
-    recipe_constraints = dict(
-        _parse_constraint(value)
-        for value in _requirement_strings(
-            recipe["requirements"].get("run_constraints", [])
+    errors = []
+    run_constraints = recipe.get("requirements", {}).get("run_constraints", [])
+    conditional_run_constraints = [
+        value
+        for value in run_constraints
+        if isinstance(value, dict) and any(key in value for key in ("if", "then", "else"))
+    ]
+    if conditional_run_constraints and not options.ignore_constraints:
+        errors.append(
+            "Conditional run_constraints are not supported by check-conda-recipe; "
+            "use unconditional constraints or exclude this validation. Pass "
+            "--ignore-constraints to skip this check for conditional constraints."
         )
-    )
-    pixi_sources = _pixi_constraint_sources(pixi, set(recipe_constraints))
-    errors = _constraint_errors(recipe_constraints, pixi_sources)
-    errors.extend(
-        _transitivity_errors(pixi, recipe, project, recipe_constraints, options)
-    )
+        return errors
+
+    if not conditional_run_constraints:
+        recipe_constraints = dict(
+            _parse_constraint(value)
+            for value in _requirement_strings(run_constraints)
+        )
+        pixi_sources = _pixi_constraint_sources(pixi, set(recipe_constraints))
+        errors.extend(_constraint_errors(recipe_constraints, pixi_sources))
+        errors.extend(
+            _transitivity_errors(pixi, recipe, project, recipe_constraints, options)
+        )
     if options.check_pytorch:
         errors.extend(_pytorch_errors(recipe))
     return errors
@@ -308,6 +334,7 @@ def main() -> int:
     parser.add_argument("--project-file", type=Path, default=Path("pyproject.toml"))
     parser.add_argument("--package-alias", action="append", default=[])
     parser.add_argument("--check-pytorch", action="store_true")
+    parser.add_argument("--ignore-constraints", action="store_true")
     args = parser.parse_args()
 
     with args.pixi_file.open("rb") as file:
@@ -323,6 +350,7 @@ def main() -> int:
         RecipeOptions(
             package_aliases=tuple(args.package_alias),
             check_pytorch=args.check_pytorch,
+            ignore_constraints=args.ignore_constraints,
         ),
     )
     if errors:

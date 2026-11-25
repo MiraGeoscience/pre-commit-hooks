@@ -12,7 +12,7 @@ dynamic = ["version"]
 dependencies = ["packaging>=25", "PyYAML>=6", "tomlkit>=0.15.2"]
 
 description = ""
-readme = "README.rst"
+readme = "README.md"
 license = "MIT"
 authors = [{ name = "Mira Geoscience", email = "support@mirageoscience.com" }]
 
