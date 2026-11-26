@@ -28,6 +28,8 @@ Only enable the optional PyTorch check with `--check-pytorch` when required.
 
 For source validation, enable `--validate-pypi-sources`. The repeatable `--artifact-source-root` option is only used with this flag to permit download locations outside an index's URL. PyPI's standard artifact host is allowed automatically. If index configuration lives in a separate feature, `--pypi-index-feature` selects that feature's `pypi-options`; the feature must be enabled in the environment to apply its indexes. Otherwise, workspace-level options or the default PyPI index are used.
 
+**Known limitation:** unconditional dependency traversal can reject valid recipes with conditional runtime dependencies. The check aims at covering simple use-cases for now.
+
 ### `prepare-commit-msg`
 Adds the JIRA ID found in the branch name in case it is missing from the commit message.
 

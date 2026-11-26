@@ -9,6 +9,9 @@
 
 """Validate conda recipe constraints against the Pixi workspace.
 
+**Known limitation:** unconditional dependency traversal can reject valid recipes with
+conditional runtime dependencies. The check aims at covering simple use cases for now.
+
 Conditional ``run_constraints`` entries are not supported by the Conda recipe
 comparison because they are flattened to a single effective constraint rather than
 one unconditional value. Use unconditional constraints or pass
