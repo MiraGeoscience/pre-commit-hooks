@@ -13,11 +13,25 @@ Checks for valid copyright statements in files.
 ### `check-pixi-lock`
 Checks locked Conda and PyPI sources against Pixi workspace features.
 `--strict-pypi` requires the lock to contain exactly the packages declared by
-the selected PyPI feature; otherwise transitive PyPI dependencies are allowed
+the selected PyPI features; otherwise transitive PyPI dependencies are allowed
 while the feature packages are still checked.
 
 By default, this hook reads `pixi.toml` and `pixi.lock` from the repository root.
-Configure differing feature names with `--pypi-feature` and `--conda-feature`.
+Use `--pypi-feature` for each feature that declares packages under
+`[feature.<name>.pypi-dependencies]`; the default is `mira-pypi`. Repeat the
+option when PyPI dependencies are split across features, for example
+`--pypi-feature=mira-pypi --pypi-feature=vendor-pypi`.
+
+Repeat the optional `--conda-feature` for each feature whose packages under
+`[feature.<name>.dependencies]` must stay Conda-sourced, for example
+`--conda-feature=conda-base --conda-feature=conda-runtime`. This enables a
+source-separation check: in environments where the selected features are
+enabled, those packages must be present in the Conda lock and not the PyPI
+lock, while packages from the selected PyPI features must be present in the
+PyPI lock and not the Conda lock. Do not select the same package in both
+categories; this check rejects that overlap, even though Pixi itself resolves
+such a conflict in favour of Conda. If omitted, the hook does not check the
+source of feature-declared Conda dependencies.
 
 ### `check-recipe`
 Checks recipe `run_constraints` against Pixi constraints, discovers matching

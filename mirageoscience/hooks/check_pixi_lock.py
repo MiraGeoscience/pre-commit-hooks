@@ -27,8 +27,8 @@ PYPI_INDEX = "https://pypi.org/simple"
 
 @dataclass(frozen=True)
 class LockOptions:
-    pypi_feature: str
-    conda_feature: str | None = None
+    pypi_feature: str | tuple[str, ...]
+    conda_feature: str | tuple[str, ...] | None = None
     strict_pypi: bool = False
     pypi_index_feature: str | None = None
     validate_pypi_sources: bool = False
@@ -82,6 +82,22 @@ def _feature_dependencies(
         ):
             dependencies.update(target.get(dependency_type, {}))
     return {canonicalize_name(name) for name in dependencies}
+
+
+def _pypi_features(options: LockOptions) -> tuple[str, ...]:
+    """Normalize configured PyPI features to a tuple."""
+    if isinstance(options.pypi_feature, str):
+        return (options.pypi_feature,)
+    return options.pypi_feature
+
+
+def _conda_features(options: LockOptions) -> tuple[str, ...]:
+    """Normalize configured Conda features to a tuple."""
+    if options.conda_feature is None:
+        return ()
+    if isinstance(options.conda_feature, str):
+        return (options.conda_feature,)
+    return options.conda_feature
 
 
 def _environment_features(environment: object) -> set[str]:
@@ -147,23 +163,47 @@ def _expectations(
     pixi: dict, options: LockOptions, platform: str, features: set[str]
 ) -> LockExpectations:
     """Build platform-specific package and artifact-source expectations."""
-    pypi_packages = _feature_dependencies(
-        pixi, options.pypi_feature, "pypi-dependencies", platform
+    pypi_features = _pypi_features(options)
+    pypi_packages = set()
+    for feature_name in pypi_features:
+        feature_packages = _feature_dependencies(
+            pixi, feature_name, "pypi-dependencies", platform
+        )
+        if feature_name in features:
+            pypi_packages.update(feature_packages)
+    conda_packages = set()
+    for feature_name in _conda_features(options):
+        feature_packages = _feature_dependencies(
+            pixi, feature_name, "dependencies", platform
+        )
+        if feature_name in features:
+            conda_packages.update(feature_packages)
+    index_features = (
+        (
+            (options.pypi_index_feature,)
+            if options.pypi_index_feature in features
+            else ()
+        )
+        if options.pypi_index_feature
+        else tuple(
+            feature_name for feature_name in pypi_features if feature_name in features
+        )
     )
-    conda_packages = (
-        _feature_dependencies(pixi, options.conda_feature, "dependencies", platform)
-        if options.conda_feature
-        else set()
-    )
-    index_feature: str | None = options.pypi_index_feature or options.pypi_feature
-    if index_feature not in features:
-        index_feature = None
-    index_urls = (
-        _index_urls(pixi, index_feature) if options.validate_pypi_sources else set()
-    )
+    index_urls = set()
+    if options.validate_pypi_sources:
+        if index_features:
+            for feature_name in index_features:
+                index_urls.update(_index_urls(pixi, feature_name))
+        else:
+            index_urls = _index_urls(pixi, None)
     source_indexes = set(index_urls)
-    index_options = _pypi_options(pixi, index_feature)
-    if options.validate_pypi_sources and not index_options.get("index-url"):
+    has_default_index = (
+        not index_features and not _pypi_options(pixi, None).get("index-url")
+    ) or any(
+        not _pypi_options(pixi, feature_name).get("index-url")
+        for feature_name in index_features
+    )
+    if options.validate_pypi_sources and has_default_index:
         source_indexes.add(PYPI_INDEX)
     source_roots = {
         f"{url.removesuffix('/simple').rstrip('/')}/" for url in source_indexes
@@ -247,10 +287,10 @@ def _pypi_errors(
     """Check locked PyPI packages, using exact or minimum membership policy."""
     options = context.options
     expectations = context.expectations
+    pypi_features = _pypi_features(options)
+    pypi_feature_enabled = any(feature in features for feature in pypi_features)
     pypi_names = _locked_names(entries, context.packages_by_url, "pypi")
-    expected_pypi = (
-        expectations.pypi_packages if options.pypi_feature in features else set()
-    )
+    expected_pypi = expectations.pypi_packages
     errors = []
     if options.strict_pypi:
         if pypi_names != expected_pypi:
@@ -262,15 +302,18 @@ def _pypi_errors(
         missing_pypi = expected_pypi - pypi_names
         if missing_pypi:
             errors.append(f"{label}: missing PyPI packages {sorted(missing_pypi)}")
-        if options.pypi_feature not in features and pypi_names:
+        if not pypi_feature_enabled and pypi_names:
+            feature_label = (
+                f"the {pypi_features[0]!r} feature"
+                if len(pypi_features) == 1
+                else f"any of the {pypi_features!r} features"
+            )
             errors.append(
-                f"{label}: PyPI packages are locked without the "
-                f"{options.pypi_feature!r} feature: {sorted(pypi_names)}"
+                f"{label}: PyPI packages are locked without {feature_label}: "
+                f"{sorted(pypi_names)}"
             )
     errors.extend(
-        _source_errors(
-            label, entries, environment_lock, options.pypi_feature in features, context
-        )
+        _source_errors(label, entries, environment_lock, pypi_feature_enabled, context)
     )
     return errors
 
@@ -279,21 +322,11 @@ def _conda_errors(
     label: str,
     pypi_names: set[str],
     conda_names: set[str],
-    features: set[str],
     context: LockContext,
 ) -> list[str]:
     """Check expected packages are locked from their configured package source."""
-    options = context.options
-    expected_conda = (
-        context.expectations.conda_packages
-        if options.conda_feature and options.conda_feature in features
-        else set()
-    )
-    expected_pypi = (
-        context.expectations.pypi_packages
-        if options.pypi_feature in features
-        else set()
-    )
+    expected_conda = context.expectations.conda_packages
+    expected_pypi = context.expectations.pypi_packages
     errors = []
     missing_conda = expected_conda - conda_names
     if missing_conda:
@@ -325,7 +358,7 @@ def _validate_platform(
     conda_names = _locked_names(entries, context.packages_by_url, "conda")
     return _pypi_errors(
         label, entries, environment_lock, features, context
-    ) + _conda_errors(label, pypi_names, conda_names, features, context)
+    ) + _conda_errors(label, pypi_names, conda_names, context)
 
 
 def _validate_environment(
@@ -386,8 +419,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pixi-file", type=Path, default=Path("pixi.toml"))
     parser.add_argument("--lock-file", type=Path, default=Path("pixi.lock"))
-    parser.add_argument("--pypi-feature", default="mira-pypi")
-    parser.add_argument("--conda-feature")
+    parser.add_argument("--pypi-feature", action="append")
+    parser.add_argument("--conda-feature", action="append")
     parser.add_argument("--strict-pypi", action="store_true")
     parser.add_argument("--pypi-index-feature")
     parser.add_argument("--validate-pypi-sources", action="store_true")
@@ -404,8 +437,8 @@ def main() -> int:
             pixi,
             lock,
             LockOptions(
-                pypi_feature=args.pypi_feature,
-                conda_feature=args.conda_feature,
+                pypi_feature=tuple(args.pypi_feature or ["mira-pypi"]),
+                conda_feature=tuple(args.conda_feature or []),
                 strict_pypi=args.strict_pypi,
                 pypi_index_feature=args.pypi_index_feature,
                 validate_pypi_sources=args.validate_pypi_sources,

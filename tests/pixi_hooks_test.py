@@ -70,6 +70,15 @@ filelock = ">=4.2.1"
 
 [feature.mira-pypi]
 pypi-dependencies = {}
+
+[feature.vendor-pypi]
+pypi-dependencies = {}
+
+[feature.conda-base]
+dependencies = {}
+
+[feature.conda-extra]
+dependencies = {}
 """
 
 
@@ -116,6 +125,12 @@ def test_pixi_lock_main_parses_toml_11_inline_tables(tmp_path, monkeypatch, caps
             str(lock_file),
             "--pypi-feature",
             "mira-pypi",
+            "--pypi-feature",
+            "vendor-pypi",
+            "--conda-feature",
+            "conda-base",
+            "--conda-feature",
+            "conda-extra",
         ],
     )
 
@@ -155,6 +170,58 @@ def test_non_strict_pypi_allows_transitive_packages_for_meta_packages():
     errors = validate_lock(pixi, lock, LockOptions(pypi_feature="mira-pypi"))
 
     assert not errors
+
+
+def test_multiple_pypi_features_check_packages_and_indexes_together():
+    pixi, lock = _lock_fixture(
+        features=["mira-pypi", "vendor-pypi"],
+        pypi_names=("mira-package", "vendor-package"),
+    )
+    pixi["feature"]["mira-pypi"]["pypi-options"] = {
+        "extra-index-urls": ["https://packages.example.org/simple"]
+    }
+    pixi["feature"]["vendor-pypi"] = {"pypi-dependencies": {"vendor-package": "*"}}
+    lock["packages"][1]["pypi"] = (
+        "https://files.pythonhosted.org/packages/vendor-package.whl"
+    )
+    lock["environments"]["default"]["indexes"] = ["https://packages.example.org/simple"]
+    lock["environments"]["default"]["packages"]["win-64"] = [
+        {"pypi": package["pypi"]} for package in lock["packages"]
+    ]
+
+    errors = validate_lock(
+        pixi,
+        lock,
+        LockOptions(
+            pypi_feature=("mira-pypi", "vendor-pypi"),
+            strict_pypi=True,
+            validate_pypi_sources=True,
+        ),
+    )
+
+    assert not errors
+
+
+def test_multiple_conda_features_check_packages_together():
+    pixi, lock = _lock_fixture(
+        features=["mira-pypi", "conda-base", "conda-extra"],
+        pypi_names=("mira-package",),
+    )
+    pixi["feature"]["conda-base"] = {"dependencies": {"base-package": "*"}}
+    pixi["feature"]["conda-extra"] = {"dependencies": {"extra-package": "*"}}
+    base_url = "https://example.org/base-package-1-0.conda"
+    extra_url = "https://example.org/extra-package-1-0.conda"
+    entries = lock["environments"]["default"]["packages"]["win-64"]
+    entries.extend([{"conda": base_url}, {"conda": extra_url}])
+    options = LockOptions(
+        pypi_feature="mira-pypi",
+        conda_feature=("conda-base", "conda-extra"),
+    )
+
+    assert not validate_lock(pixi, lock, options)
+    entries.remove({"conda": extra_url})
+    errors = validate_lock(pixi, lock, options)
+    assert any("missing Conda packages ['extra-package']" in error for error in errors)
 
 
 def test_pypi_source_validation_defaults_to_mira_git_urls():
