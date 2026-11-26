@@ -9,9 +9,10 @@ build-backend = "poetry_dynamic_versioning.backend"
 name = "mirageoscience.pre-commit-hooks"
 requires-python = ">=3.12,<4.0"
 dynamic = ["version"]
+dependencies = ["packaging>=25", "PyYAML>=6", "tomlkit>=0.15.2"]
 
 description = ""
-readme = "README.rst"
+readme = "README.md"
 license = "MIT"
 authors = [{ name = "Mira Geoscience", email = "support@mirageoscience.com" }]
 
@@ -21,6 +22,8 @@ Repository = "https://github.com/MiraGeoscience/pre-commit-hooks"
 [project.scripts]
 check_copyright = "mirageoscience.hooks.check_copyright:main"
 git_message_hook = "mirageoscience.hooks.git_message_hook:main"
+check_pixi_lock = "mirageoscience.hooks.check_pixi_lock:main"
+check_recipe = "mirageoscience.hooks.check_recipe:main"
 
 [dependency-groups]
 dev = [
@@ -29,7 +32,6 @@ dev = [
     "pytest",
     "pytest-mock",
     "pytest-cov",
-    "tomli",
 ]
 
 [tool.poetry]
@@ -37,7 +39,6 @@ requires-poetry = ">=2.2.0"
 
 include = [
     "LICENSE",
-    "README.rst",
     { path = "mirageoscience/hooks/_version.py", format = ["sdist", "wheel"] },
 ]
 
