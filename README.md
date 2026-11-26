@@ -33,6 +33,30 @@ categories; this check rejects that overlap, even though Pixi itself resolves
 such a conflict in favour of Conda. If omitted, the hook does not check the
 source of feature-declared Conda dependencies.
 
+By default, the hook checks expected package membership and Conda-versus-PyPI
+lock placement, but does not validate PyPI index URLs or package download
+origins. Enable `--validate-pypi-sources` for those checks. The repeatable
+`--artifact-source-root` option is only used with this flag to permit download
+locations outside an index's URL. For example, if a locked wheel is downloaded from
+`https://artifacts.example.com/python-wheels/package-1.0.whl`, allow that artifact
+location with:
+
+```yaml
+args:
+  - --validate-pypi-sources
+  - --artifact-source-root=https://artifacts.example.com/python-wheels
+```
+
+The root is the allowed artifact URL prefix, not the PyPI index URL; repeat the option
+for additional artifact locations.
+
+PyPI's standard artifact host is allowed automatically.
+If index configuration lives in a separate feature, `--pypi-index-feature` selects that
+feature's `pypi-options`; the feature must be enabled in the environment to apply its
+indexes. Otherwise, workspace-level options or the default PyPI index are used. Git
+sources from `git+https://github.com/MiraGeoscience/` are allowed by default; repeat
+`--git-url-prefix` to configure allowed Git URL prefixes.
+
 ### `check-recipe`
 Checks recipe `run_constraints` against Pixi constraints, discovers matching
 feature constraints from `pixi.toml`, verifies constrained packages are not
@@ -49,17 +73,9 @@ unconditional constraints or pass `--ignore-constraints` to skip this specific
 constraint comparison.
 
 Recipe security floors and their Pixi source are inferred from `recipe.yaml` and
-`pixi.toml`. Git sources from `git+https://github.com/MiraGeoscience/` are allowed
-by default and can be overridden with `--git-url-prefix`.
+`pixi.toml`.
 
 Only enable the optional PyTorch check with `--check-pytorch` when required.
-
-For source validation, enable `--validate-pypi-sources`. The repeatable
-`--artifact-source-root` option is only used with this flag to permit download
-locations outside an index's URL. PyPI's standard artifact host is allowed automatically.
-If index configuration lives in a separate feature, `--pypi-index-feature` selects that
-feature's `pypi-options`; the feature must be enabled in the environment to apply its
-indexes. Otherwise, workspace-level options or the default PyPI index are used.
 
 **Known limitation:** unconditional dependency traversal can reject valid recipes with
 conditional runtime dependencies. The check aims at covering simple use-cases for now.
